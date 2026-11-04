@@ -715,6 +715,13 @@ tc('TC33', 'Ayarlar', 'Add, rename, hide and delete categories', async ({ page }
 tc('TC34', 'Ayarlar', 'Sync panel renders; invalid Supabase URL/key is rejected', async ({ page }) => {
   await tab(page, 'Ayarlar');
   await visible(page.getByText('Veriler yalnızca bu telefonda saklanıyor.'), 'local mode text');
+  if (!(await page.getByText('Eşitlemeyi kur').count())) {
+    // Build has the household Supabase project built in: the panel goes straight to sign-in.
+    await visible(page.getByLabel('E-posta'), 'sign-in email field');
+    await visible(page.getByRole('button', { name: 'Hesap oluştur' }), 'create account button');
+    await noHorizontalOverflow(page, 'sync panel sign-in');
+    return;
+  }
   await page.getByText('Eşitlemeyi kur').click();
   await page.getByLabel('Supabase proje adresi').fill('http://not-secure.example.com');
   await page.getByLabel('Supabase anon anahtarı').fill('kisa');
