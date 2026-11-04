@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { store, useStore } from '../store/store';
+import { useStore } from '../store/store';
 import { useT } from '../i18n';
 import { useHelpers } from '../hooks';
 import { byCategory, filterTxns, monthlyTrend, totals } from '../lib/stats';
@@ -19,7 +19,8 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
   const [kind, setKind] = useState<Kind>('expense');
   const [sel, setSel] = useState<string | null>(null);
 
-  const basis = prefs.monthBasis;
+  // Card spending always counts in the month the bill is paid (chosen by the household).
+  const basis = 'pay' as const;
   const monthTx = useMemo(() => filterTxns(data.txns, { month, personId: person, basis }), [data.txns, month, person, basis]);
   const tot = totals(monthTx);
   const slices = useMemo(() => byCategory(monthTx.filter((x) => x.kind === kind), data.categories, prefs.lang), [monthTx, kind, data.categories, prefs.lang]);
@@ -52,11 +53,6 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
         })}
       </div>
 
-      <div className="basis">
-        <Segmented<'pay' | 'purchase'> value={basis} onChange={(b) => store.setPrefs({ monthBasis: b })} ariaLabel={t('basisLabel')}
-          options={[{ value: 'pay', label: t('basisPay') }, { value: 'purchase', label: t('basisPurchase') }]} />
-        <p className="muted small">{t(basis === 'pay' ? 'basisPayHint' : 'basisPurchaseHint')}</p>
-      </div>
 
       <section className="card">
         <div className="card-head">

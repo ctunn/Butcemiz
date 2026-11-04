@@ -23,11 +23,11 @@ export function Transactions({ month, setMonth, onEdit }: { month: string; setMo
   const list = useMemo(() => {
     const fq = fold(q.trim());
     return data.txns
-      .filter((x) => (allMonths || txnMonth(x, prefs.monthBasis) === month) && (!person || x.person_id === person) &&
+      .filter((x) => (allMonths || txnMonth(x, 'pay') === month) && (!person || x.person_id === person) &&
         (!card || (card === 'cash' ? !x.card_id : x.card_id === card)) &&
         (!fq || fold(x.note + ' ' + h.catName(h.cat(x.category_id)) + ' ' + String(x.amount) + ' ' + h.money(x.amount)).includes(fq)))
       .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
-  }, [data.txns, month, allMonths, q, person, card, h, prefs.monthBasis]);
+  }, [data.txns, month, allMonths, q, person, card, h]);
 
   const groups = useMemo(() => {
     const g: { date: string; items: Txn[] }[] = [];
