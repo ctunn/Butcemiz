@@ -8,7 +8,7 @@ import { TxnRow } from '../components/TxnRow';
 import { Empty } from '../components/ui';
 import { dayLabel, todayISO } from '../lib/dates';
 import { fold } from '../lib/text';
-import { totals } from '../lib/stats';
+import { totals, txnMonth } from '../lib/stats';
 import type { Txn } from '../types';
 
 export function Transactions({ month, setMonth, onEdit }: { month: string; setMonth: (m: string) => void; onEdit: (t: Txn) => void }) {
@@ -23,11 +23,11 @@ export function Transactions({ month, setMonth, onEdit }: { month: string; setMo
   const list = useMemo(() => {
     const fq = fold(q.trim());
     return data.txns
-      .filter((x) => (allMonths || x.date.startsWith(month)) && (!person || x.person_id === person) &&
+      .filter((x) => (allMonths || txnMonth(x, prefs.monthBasis) === month) && (!person || x.person_id === person) &&
         (!card || (card === 'cash' ? !x.card_id : x.card_id === card)) &&
         (!fq || fold(x.note + ' ' + h.catName(h.cat(x.category_id)) + ' ' + String(x.amount) + ' ' + h.money(x.amount)).includes(fq)))
       .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));
-  }, [data.txns, month, allMonths, q, person, card, h]);
+  }, [data.txns, month, allMonths, q, person, card, h, prefs.monthBasis]);
 
   const groups = useMemo(() => {
     const g: { date: string; items: Txn[] }[] = [];

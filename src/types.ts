@@ -25,6 +25,8 @@ export interface Card {
   person_id: string | null;
   last4?: string | null;
   kind?: 'card' | 'account';
+  cut_day?: number | null; // statement cut-off day (hesap kesim)
+  due_day?: number | null; // payment due day (son ödeme)
 }
 
 export interface Txn {
@@ -38,6 +40,7 @@ export interface Txn {
   note: string;
   source: 'manual' | 'import';
   import_id?: string | null;
+  pay_month?: string | null; // YYYY-MM the card bill is paid in (budget month); null = purchase month
   created_at: string;
 }
 

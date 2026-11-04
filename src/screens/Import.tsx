@@ -26,6 +26,7 @@ export function Import() {
   const [bank, setBank] = useState<BankId | null>(null);
   const [mode, setMode] = useState<'card' | 'account'>('card');
   const [skipped, setSkipped] = useState(0);
+  const [stmtDates, setStmtDates] = useState<{ cut: string | null; due: string | null }>({ cut: null, due: null });
   const [rows, setRows] = useState<Row[] | null>(null);
   const [failed, setFailed] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -35,7 +36,7 @@ export function Import() {
     setBusy(true); setFailed(false); setRows(null);
     try {
       const res = await parseStatementFile(f, password);
-      setNeedPw(''); setBank(res.bank); setMode(res.mode); setSkipped(res.skipped);
+      setNeedPw(''); setBank(res.bank); setMode(res.mode); setSkipped(res.skipped); setStmtDates({ cut: res.cutDate ?? null, due: res.dueDate ?? null });
       // pick a card/account of the detected bank and statement type if the selected one doesn't match
       const sel = data.cards.find((c) => c.id === cardId);
       let useCard = cardId;
@@ -79,8 +80,11 @@ export function Import() {
     const card = data.cards.find((c) => c.id === cardId);
     const importId = uid();
     const now = new Date().toISOString();
+    // Card statements are paid in the month of their due date: that is the budget month.
+    const isCard = (card?.kind || 'card') === 'card';
+    const payMonth = isCard && mode === 'card' && stmtDates.due ? stmtDates.due.slice(0, 7) : null;
     const txns: Txn[] = selected.map((r) => ({
-      id: uid(), kind: r.kind, amount: r.amount, date: r.date, category_id: r.category,
+      id: uid(), kind: r.kind, amount: r.amount, date: r.date, category_id: r.category, pay_month: payMonth,
       person_id: card?.person_id ?? null, card_id: cardId || null,
       note: r.description + (r.installment ? ` (${r.installment})` : ''), source: 'import', import_id: importId, created_at: now,
     }));
@@ -90,6 +94,11 @@ export function Import() {
     setBusy(true);
     try {
       await store.upsert('txns', txns);
+      // Remember the card's cut-off and due days so manual card entries land in the right month.
+      if (card && isCard && stmtDates.cut && stmtDates.due) {
+        const cut_day = Number(stmtDates.cut.slice(8, 10)), due_day = Number(stmtDates.due.slice(8, 10));
+        if (card.cut_day !== cut_day || card.due_day !== due_day) await store.upsert('cards', [{ ...card, cut_day, due_day }]);
+      }
       if (learned.size) {
         await store.upsert('rules', [...learned].map(([key, category_id]) => ({ id: data.rules.find((x) => x.key === key)?.id || uid(), key, category_id })));
       }

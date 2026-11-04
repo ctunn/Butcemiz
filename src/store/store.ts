@@ -3,7 +3,7 @@ import type { Data, TableName, Lang } from '../types';
 import type { Backend } from './backend';
 import { LocalBackend, readLocal } from './local';
 
-export interface Prefs { lang: Lang; currency: string; defaultPersonId: string | null }
+export interface Prefs { lang: Lang; currency: string; defaultPersonId: string | null; monthBasis: 'pay' | 'purchase' }
 const PREFS_KEY = 'budget-prefs';
 
 function loadPrefs(): Prefs {
@@ -11,8 +11,8 @@ function loadPrefs(): Prefs {
   const nav: Lang = 'tr';
   try {
     const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-    return { lang: p.lang || nav, currency: p.currency || 'TRY', defaultPersonId: p.defaultPersonId ?? 'p1' };
-  } catch { return { lang: nav, currency: 'TRY', defaultPersonId: 'p1' }; }
+    return { lang: p.lang || nav, currency: p.currency || 'TRY', defaultPersonId: p.defaultPersonId ?? 'p1', monthBasis: p.monthBasis === 'purchase' ? 'purchase' : 'pay' };
+  } catch { return { lang: nav, currency: 'TRY', defaultPersonId: 'p1', monthBasis: 'pay' }; }
 }
 
 export interface State { data: Data; prefs: Prefs; mode: 'local' | 'cloud'; syncing: boolean; error: string | null }

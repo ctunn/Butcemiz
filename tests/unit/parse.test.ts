@@ -168,6 +168,7 @@ describe('Garanti Bonus card statement layout', () => {
   const r = parseStatementText(text);
   const by = (d: string) => r.rows.find((x) => x.description.includes(d))!;
   it('detects Garanti card statement', () => { expect(r.bank).toBe('garanti'); expect(r.mode).toBe('card'); });
+  it('reads cut-off and due dates', () => { expect(r.cutDate).toBe('2026-10-25'); expect(r.dueDate).toBe('2026-11-04'); });
   it('uses the monthly installment, not the total', () => {
     expect(by('BAUHAUS')).toMatchObject({ amount: 2190.3, installment: '1/6', kind: 'expense' });
     expect(by('BEYMEN')).toMatchObject({ amount: 1529.1, installment: '4/6' });

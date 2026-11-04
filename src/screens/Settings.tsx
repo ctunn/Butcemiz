@@ -176,6 +176,16 @@ function CardForm({ c, onDone }: { c: Card; onDone: () => void }) {
           <option value="account">{t('kindAccount')}</option>
         </select>
       </label>
+      {(v.kind || 'card') === 'card' && (
+        <div className="row2">
+          <label className="field"><span>{t('cutDay')}</span>
+            <input inputMode="numeric" value={v.cut_day ?? ''} placeholder="25" onChange={(e) => { const n = parseInt(e.target.value, 10); setV({ ...v, cut_day: n >= 1 && n <= 31 ? n : null }); }} />
+          </label>
+          <label className="field"><span>{t('dueDay')}</span>
+            <input inputMode="numeric" value={v.due_day ?? ''} placeholder="4" onChange={(e) => { const n = parseInt(e.target.value, 10); setV({ ...v, due_day: n >= 1 && n <= 31 ? n : null }); }} />
+          </label>
+        </div>
+      )}
       <label className="field"><span>{t('name')}</span><input value={v.name} onChange={(e) => setV({ ...v, name: e.target.value })} placeholder={BANK_NAMES[v.bank]} /></label>
       <label className="field"><span>{t('owner')}</span>
         <select value={v.person_id || ''} onChange={(e) => setV({ ...v, person_id: e.target.value || null })}>

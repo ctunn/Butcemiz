@@ -55,6 +55,11 @@ create table if not exists txns (
 );
 create index if not exists txns_household_date on txns (household_id, date desc);
 
+-- v1.1: card bills count in the month they are paid (safe to re-run).
+alter table txns add column if not exists pay_month text;
+alter table cards add column if not exists cut_day int;
+alter table cards add column if not exists due_day int;
+
 create table if not exists rules (
   household_id uuid not null references households(id) on delete cascade,
   id text not null, key text not null, category_id text not null,

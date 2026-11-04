@@ -36,6 +36,7 @@ const en = {
   perPerson: 'Per person', thisMonth: 'This month', installment: 'Installment', cardOrAccount: 'Card / account',
   flag_cardpay: 'Card payment (already counted in card statement)', flag_transfer: 'Transfer', flag_investment: 'Investment / savings', flag_cash: 'Cash withdrawal', flag_refund: 'Payment / refund',
   modeCard: 'Card statement', modeAccount: 'Account statement', unticked: '{n} transfers, card payments or investments are unticked so nothing is counted twice',
+  basisLabel: 'Which month card spending counts in', basisPay: 'Payment month', basisPurchase: 'Purchase date', basisPayHint: 'Card purchases count in the month the statement is paid, next to the salary that pays it.', basisPurchaseHint: 'Every purchase counts on the day it was made.', cutDay: 'Statement day', dueDay: 'Payment due day',
   confirmYes: 'Yes, continue', cardDeleteConfirm: '{n} transactions use this card. They will be moved to Cash / Debit. Continue?', skippedRows: '{n} lines looked like transactions but could not be read; check them against the statement.',
   cardKind: 'Type', kindCard: 'Credit card', kindAccount: 'Bank account',
 };
@@ -77,6 +78,7 @@ const tr: Dict = {
   perPerson: 'Kişiye göre', thisMonth: 'Bu ay', installment: 'Taksit', cardOrAccount: 'Kart / hesap',
   flag_cardpay: 'Kart ödemesi (kart ekstresinde zaten var)', flag_transfer: 'Transfer', flag_investment: 'Yatırım / birikim', flag_cash: 'Nakit çekim', flag_refund: 'Ödeme / iade',
   modeCard: 'Kart ekstresi', modeAccount: 'Hesap hareketleri', unticked: 'Çift sayılmaması için {n} transfer, kart ödemesi veya yatırım işaretsiz bırakıldı',
+  basisLabel: 'Kart harcamaları hangi ayda sayılsın', basisPay: 'Ödeme ayı', basisPurchase: 'Harcama tarihi', basisPayHint: 'Kart harcamaları ekstrenin ödendiği ayda, onu ödeyen maaşın yanında sayılır.', basisPurchaseHint: 'Her harcama yapıldığı günün ayında sayılır.', cutDay: 'Hesap kesim günü', dueDay: 'Son ödeme günü',
   confirmYes: 'Evet, devam et', cardDeleteConfirm: 'Bu kartta {n} işlem var. Nakit / Banka kartı olarak işaretlenecekler. Devam edilsin mi?', skippedRows: 'İşleme benzeyen {n} satır okunamadı; ekstreyle karşılaştırın.',
   cardKind: 'Tür', kindCard: 'Kredi kartı', kindAccount: 'Banka hesabı',
 };

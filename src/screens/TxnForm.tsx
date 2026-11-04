@@ -6,6 +6,7 @@ import { Segmented, toast, askConfirm } from '../components/ui';
 import { parseAmount } from '../lib/money';
 import { todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
+import { payMonthFor } from '../lib/paymonth';
 import { merchantKey } from '../lib/text';
 import type { Kind, Txn } from '../types';
 
@@ -38,6 +39,10 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
       id: initial?.id || uid(),
       kind, amount: Math.round(n * 100) / 100, date, category_id: category,
       person_id: person, card_id: kind === 'expense' && card ? card : null,
+      // keep the statement's payment month for imported rows; otherwise derive it from the card's days
+      pay_month: initial?.source === 'import' && initial.card_id === (card || null) && initial.pay_month
+        ? initial.pay_month
+        : kind === 'expense' && card ? payMonthFor(date, data.cards.find((c) => c.id === card)) : null,
       note: note.trim(), source: initial?.source || 'manual', import_id: initial?.import_id ?? null,
       created_at: initial?.created_at || new Date().toISOString(),
     };

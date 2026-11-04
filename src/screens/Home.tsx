@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useStore } from '../store/store';
+import { store, useStore } from '../store/store';
 import { useT } from '../i18n';
 import { useHelpers } from '../hooks';
 import { byCategory, filterTxns, monthlyTrend, totals } from '../lib/stats';
@@ -19,10 +19,11 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
   const [kind, setKind] = useState<Kind>('expense');
   const [sel, setSel] = useState<string | null>(null);
 
-  const monthTx = useMemo(() => filterTxns(data.txns, { month, personId: person }), [data.txns, month, person]);
+  const basis = prefs.monthBasis;
+  const monthTx = useMemo(() => filterTxns(data.txns, { month, personId: person, basis }), [data.txns, month, person, basis]);
   const tot = totals(monthTx);
   const slices = useMemo(() => byCategory(monthTx.filter((x) => x.kind === kind), data.categories, prefs.lang), [monthTx, kind, data.categories, prefs.lang]);
-  const trend = useMemo(() => monthlyTrend(filterTxns(data.txns, { personId: person }), month, 6), [data.txns, person, month]);
+  const trend = useMemo(() => monthlyTrend(filterTxns(data.txns, { personId: person }), month, 6, basis), [data.txns, person, month, basis]);
   const maxTrend = Math.max(1, ...trend.map((x) => Math.max(x.income, x.expense)));
   const selTx = sel ? monthTx.filter((x) => x.category_id === sel && x.kind === kind).sort((a, b) => b.date.localeCompare(a.date)) : [];
   const kindTotal = kind === 'expense' ? tot.expense : tot.income;
@@ -49,6 +50,12 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
             </div>
           );
         })}
+      </div>
+
+      <div className="basis">
+        <Segmented<'pay' | 'purchase'> value={basis} onChange={(b) => store.setPrefs({ monthBasis: b })} ariaLabel={t('basisLabel')}
+          options={[{ value: 'pay', label: t('basisPay') }, { value: 'purchase', label: t('basisPurchase') }]} />
+        <p className="muted small">{t(basis === 'pay' ? 'basisPayHint' : 'basisPurchaseHint')}</p>
       </div>
 
       <section className="card">

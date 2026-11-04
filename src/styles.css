@@ -227,3 +227,6 @@ details[open] { display: flex; flex-direction: column; gap: 10px; }
 .confirm { background: var(--surface); border-radius: 18px; padding: 20px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.25); animation: fade .15s ease-out; }
 .confirm p { margin: 0; font-size: 16px; line-height: 1.45; text-align: center; }
 .btn.danger-solid { background: var(--danger); color: #fff; }
+.basis { display: flex; flex-direction: column; gap: 6px; }
+.basis .seg { display: flex; }
+.basis p { margin: 0 4px; }

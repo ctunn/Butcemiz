@@ -58,7 +58,13 @@ export class CloudBackend implements Backend {
 
   async upsert<T extends TableName>(table: T, rows: Data[T]) {
     if (!rows.length) return;
-    const { error } = await this.s.from(table).upsert((rows as any[]).map((r) => ({ ...r, household_id: this.householdId })), { onConflict: 'household_id,id' });
+    const payload = (rows as any[]).map((r) => ({ ...r, household_id: this.householdId }));
+    let { error } = await this.s.from(table).upsert(payload, { onConflict: 'household_id,id' });
+    // Database not yet updated with the v1.1 columns: save without them rather than failing.
+    if (error && /pay_month|cut_day|due_day/.test(error.message || '')) {
+      const stripped = payload.map(({ pay_month, cut_day, due_day, ...rest }) => rest);
+      ({ error } = await this.s.from(table).upsert(stripped, { onConflict: 'household_id,id' }));
+    }
     if (error) throw error;
   }
 

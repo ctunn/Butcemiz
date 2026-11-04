@@ -2,11 +2,17 @@ import type { Category, Kind, Txn } from '../types';
 
 export interface Slice { id: string; label: string; value: number; color: string; icon: string; pct: number }
 
-export interface Filter { month?: string; personId?: string | null; cardId?: string | null; kind?: Kind }
+export type MonthBasis = 'pay' | 'purchase';
+export interface Filter { month?: string; personId?: string | null; cardId?: string | null; kind?: Kind; basis?: MonthBasis }
+
+/** Budget month of a transaction: card purchases count in the month the bill is paid, unless basis is 'purchase'. */
+export function txnMonth(t: Txn, basis: MonthBasis = 'pay'): string {
+  return basis === 'pay' && t.pay_month ? t.pay_month : t.date.slice(0, 7);
+}
 
 export function filterTxns(txns: Txn[], f: Filter): Txn[] {
   return txns.filter((t) =>
-    (!f.month || t.date.startsWith(f.month)) &&
+    (!f.month || txnMonth(t, f.basis) === f.month) &&
     (!f.personId || t.person_id === f.personId) &&
     (!f.cardId || t.card_id === f.cardId) &&
     (!f.kind || t.kind === f.kind));
@@ -40,12 +46,12 @@ export function byCategory(txns: Txn[], cats: Category[], lang: 'en' | 'tr'): Sl
 }
 
 /** Totals per month for the `count` months ending at `endMonth`. */
-export function monthlyTrend(txns: Txn[], endMonth: string, count: number) {
+export function monthlyTrend(txns: Txn[], endMonth: string, count: number, basis: MonthBasis = 'pay') {
   const keys: string[] = [];
   const [y, m] = endMonth.split('-').map(Number);
   for (let i = count - 1; i >= 0; i--) {
     const d = new Date(y, m - 1 - i, 1);
     keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
-  return keys.map((k) => ({ month: k, ...totals(txns.filter((t) => t.date.startsWith(k))) }));
+  return keys.map((k) => ({ month: k, ...totals(txns.filter((t) => txnMonth(t, basis) === k)) }));
 }

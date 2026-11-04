@@ -21,6 +21,8 @@ export interface ParseResult {
   mode: 'card' | 'account';
   rows: ParsedRow[];
   skipped: number;
+  cutDate?: string | null; // statement cut-off date (card statements)
+  dueDate?: string | null; // payment due date (card statements)
 }
 
 export interface Line { text: string; y?: number; page?: number }
@@ -85,6 +87,14 @@ export function cleanDescription(s: string): string {
 const INST_X_RE = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*[xX×]\s*(\d{1,2})\s*=\s*(\d{1,3}(?:\.\d{3})*,\d{2})(\s*(\d{1,2})\s*\.?\s*taksit)?/i;
 // Card statement interest/tax lines printed without a date.
 const FEE_LINE = /^(donem faizi|gec odeme faizi|gecikme faizi|akdi faiz|kkdf|bsmv|yillik kart (ucreti|aidati)|kart aidati|ekstre ucreti|nakit avans faizi)/;
+
+/** Date printed after a label such as "Son Ödeme Tarihi: 04 Kasım 2026". */
+export function findLabeledDate(text: string, label: string): string | null {
+  const f = fold(text);
+  const re = new RegExp(label + '\\W{0,6}(\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}|\\d{1,2}\\s+[a-z]{3,9}\\s+\\d{4})');
+  const m = f.match(re);
+  return m ? parseDate(m[1]) : null;
+}
 
 function money(rest: string) {
   const masked = rest.replace(INNER_DATE_RE, (m) => ' '.repeat(m.length));
@@ -253,10 +263,10 @@ export function parseStatementLines(lines: Line[], bankHint?: BankId): ParseResu
   }
 
   const rows: ParsedRow[] = [];
+  const cutDate = mode === 'card' ? findLabeledDate(all, 'hesap kesim tarihi') : null;
+  const dueDate = mode === 'card' ? findLabeledDate(all, 'son odeme tarihi') : null;
   // Interest and tax lines on card statements (no date): book them on the statement cut-off date.
   if (mode === 'card') {
-    const cut = fold(all).match(/hesap kesim tarihi\W{0,6}(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4})/);
-    const cutDate = cut ? parseDate(cut[1]) : null;
     if (cutDate) {
       for (let i = 0; i < lines.length; i++) {
         if (used.has(i)) continue;
@@ -275,7 +285,7 @@ export function parseStatementLines(lines: Line[], bankHint?: BankId): ParseResu
     const r = classify(a.raw, mode, full);
     if (r) rows.push(r); // null = statement summary line, intentionally ignored
   }
-  return { bank, mode, rows, skipped };
+  return { bank, mode, rows, skipped, cutDate, dueDate };
 }
 
 export function parseStatementText(text: string, bankHint?: BankId): ParseResult {
