@@ -49,7 +49,7 @@ export function detectMode(text: string): 'card' | 'account' {
 // Statement summary lines, not purchases.
 const SUMMARY = /(onceki donem|donem borcu|asgari|son odeme|hesap kesim|toplam borc|kart limiti|kullanilabilir|ekstre borcu|odenmesi gereken|faiz orani|toplam harcama|donem ici|bir sonraki|kalan borc|devreden|tarihleri arasindaki|kayit bulunmustur|itibariyla)/;
 // Card statement credits: payments to the card, refunds, cashback.
-const CARD_CREDIT = /(odeme(niz)?\s*(icin)?\s*tesekkur|^odeme|\bodeme\b.*(atm|internet|mobil|sube|otomatik|havale|eft)|tahsilat|iade|geri odeme|cashback|bonus iade|puan kullanim|hesaptan odeme|kart borcu odeme|borc odeme)/;
+const CARD_CREDIT = /(kampanya|odeme(niz)?\s*(icin)?\s*tesekkur|^odeme|\bodeme\b.*(atm|internet|mobil|sube|otomatik|havale|eft)|tahsilat|iade|geri odeme|cashback|bonus iade|puan kullanim|hesaptan odeme|kart borcu odeme|borc odeme)/;
 const F_CARDPAY = /(k\.?\s*karti odeme|kart odemesi|kre\.?\s*kart borc|kredi karti (borc|odeme)|kart borcu|kk odeme)/;
 const F_INVEST = /(fon (alis|satis)|yatirim|stopaj|altin (alis|satis)|doviz (alis|satis)|\.fx\.|\bfx\b|repo|hisse|borsa|vadeli hesa)/;
 const F_FEE = /(ucret|komisyon|masraf|kesinti ve ekleri|bsmv|hesap isletim)/;
@@ -80,6 +80,11 @@ export function cleanDescription(s: string): string {
     .replace(/^[\s|:\-–]+/, '')
     .trim();
 }
+
+// Garanti-style installment column: "2.190,30x6=13.141,80 1.Taksit" (installment x count = total, nth installment).
+const INST_X_RE = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*[xX×]\s*(\d{1,2})\s*=\s*(\d{1,3}(?:\.\d{3})*,\d{2})(\s*(\d{1,2})\s*\.?\s*taksit)?/i;
+// Card statement interest/tax lines printed without a date.
+const FEE_LINE = /^(donem faizi|gec odeme faizi|gecikme faizi|akdi faiz|kkdf|bsmv|yillik kart (ucreti|aidati)|kart aidati|ekstre ucreti|nakit avans faizi)/;
 
 function money(rest: string) {
   const masked = rest.replace(INNER_DATE_RE, (m) => ' '.repeat(m.length));
@@ -114,6 +119,15 @@ export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null 
   // A second (posting) date right after the transaction date.
   const second = rest.match(LEADING_DATE);
   if (second && parseDate(second[1])) rest = rest.slice(second[0].length);
+  // Remove the "installment x count = total" column so the total is never taken as this month's amount.
+  let instX: string | null = null;
+  if (mode === 'card') {
+    const xm = rest.match(INST_X_RE);
+    if (xm) {
+      instX = xm[5] ? `${xm[5]}/${xm[2]}` : `?/${xm[2]}`;
+      rest = rest.slice(0, xm.index!) + ' '.repeat(xm[0].length) + rest.slice(xm.index! + xm[0].length);
+    }
+  }
   const ms = money(rest);
   if (!ms.length) return null;
 
@@ -148,8 +162,8 @@ export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null 
   const descEnd = mode === 'account' ? pick.index : ms[0].index;
   const desc = rest.slice(0, descEnd).trim();
   const plusSuffix = /\+$/.test(pick.raw.trim().replace(/\s?(TL|TRY|₺)$/i, ''));
-  const inst = findInstallment(rest);
-  const installment = inst ? (inst.of ? `${inst.n}/${inst.of}` : `${inst.n}.`) : null;
+  const inst = instX ? null : findInstallment(rest);
+  const installment = instX ?? (inst ? (inst.of ? `${inst.n}/${inst.of}` : `${inst.n}.`) : null);
   return { date, amount: pick.v, desc, signed: true, plusSuffix, amountsFirst: false, installment };
 }
 
@@ -239,6 +253,21 @@ export function parseStatementLines(lines: Line[], bankHint?: BankId): ParseResu
   }
 
   const rows: ParsedRow[] = [];
+  // Interest and tax lines on card statements (no date): book them on the statement cut-off date.
+  if (mode === 'card') {
+    const cut = fold(all).match(/hesap kesim tarihi\W{0,6}(\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{1,2}\s+[a-z]{3,9}\s+\d{4})/);
+    const cutDate = cut ? parseDate(cut[1]) : null;
+    if (cutDate) {
+      for (let i = 0; i < lines.length; i++) {
+        if (used.has(i)) continue;
+        const f = fold(lines[i].text.trim());
+        if (!FEE_LINE.test(f)) continue;
+        const ms = money(lines[i].text);
+        if (ms.length !== 1 || ms[0].v <= 0) continue;
+        rows.push({ date: cutDate, description: cleanDescription(lines[i].text.slice(0, ms[0].index)), amount: ms[0].v, kind: 'expense', flag: null, hint: 'fees', installment: null });
+      }
+    }
+  }
   for (const a of anchors) {
     const above = a.extra.filter((e) => e.above).map((e) => e.text);
     const below = a.extra.filter((e) => !e.above).map((e) => e.text);

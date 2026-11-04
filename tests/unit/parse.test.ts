@@ -143,3 +143,53 @@ describe('installment purchases (taksitli işlemler)', () => {
   });
 });
 
+describe('Garanti Bonus card statement layout', () => {
+  // Column order: İşlem Tarihi | Dönem İçi İşlemler | Kalan Borç / Taksit | Bonus (TL) | Tutar (TL). Made-up data.
+  const text = [
+    'Bonus Platinum   www.garantibbva.com.tr',
+    'Hesap Kesim Tarihi   25 Ekim 2026',
+    'Son Ödeme Tarihi   04 Kasım 2026',
+    'İşlem Tarihi   Dönem İçi İşlemler   Kalan Borç / Taksit   Bonus (TL)   Tutar (TL)',
+    'ÖNCEKİ DÖNEMDEN DEVİR EDİLEN TUTAR   10.000,00',
+    'DÖNEM FAİZİ   404,05',
+    'GEÇ ÖDEME FAİZİ   16,47',
+    'KKDF + BSMV   126,16',
+    '02 Ekim 2026   YAPAY ZEKA KAMPANYASI   150,00',
+    '07 Ekim 2026   ÖDEMENİZ İÇİN TEŞEKKÜR EDERİZ   10.000,00+',
+    '03 Ekim 2026   BONUS BEDAVA ALIŞVERİŞ   152,09-',
+    '04 Ekim 2026   MİGROS-ORNEK M MIGROS   0,12   159,94',
+    '03 Ekim 2026   IYZICO   *AMAZON.COM.T   156,34x3=469,00 1.Taksit   0,35   156,34',
+    '17 Ekim 2026   BAUHAUS İNŞAAT MALZEMELER   2.190,30x6=13.141,80 1.Taksit   26,28   2.190,30',
+    '07 Ekim 2026   BEYMEN PERAKENDE VE TEKST   1.529,10x6=9.174,60 4.Taksit   1.529,10',
+    '30 Eylül 2026   34287-NAKİL VASITALARI VE   725,66x3=2.177,00 3.Taksit   725,66',
+    '29 Eylül 2026   ANTHROPIC* CLAUDE SUB   24,00 USD   1.211,31',
+    '23 Ekim 2026   ÖRNEK KANTİN   1.470,60',
+  ].join('\n');
+  const r = parseStatementText(text);
+  const by = (d: string) => r.rows.find((x) => x.description.includes(d))!;
+  it('detects Garanti card statement', () => { expect(r.bank).toBe('garanti'); expect(r.mode).toBe('card'); });
+  it('uses the monthly installment, not the total', () => {
+    expect(by('BAUHAUS')).toMatchObject({ amount: 2190.3, installment: '1/6', kind: 'expense' });
+    expect(by('BEYMEN')).toMatchObject({ amount: 1529.1, installment: '4/6' });
+    expect(by('NAKİL')).toMatchObject({ amount: 725.66, installment: '3/3' });
+    expect(by('AMAZON')).toMatchObject({ amount: 156.34, installment: '1/3' });
+  });
+  it('keeps description clean', () => expect(by('BAUHAUS').description).toBe('BAUHAUS İNŞAAT MALZEMELER'));
+  it('ignores bonus column and campaign/bonus lines', () => {
+    expect(by('MİGROS')).toMatchObject({ amount: 159.94 });
+    expect(by('KAMPANYA')).toMatchObject({ flag: 'refund' });
+    expect(by('BONUS BEDAVA')).toMatchObject({ flag: 'refund' });
+    expect(by('TEŞEKKÜR')).toMatchObject({ flag: 'refund' });
+  });
+  it('uses TRY for foreign purchases', () => expect(by('ANTHROPIC')).toMatchObject({ amount: 1211.31 }));
+  it('books interest and taxes as bank fees on the cut-off date', () => {
+    const fees = r.rows.filter((x) => x.hint === 'fees');
+    expect(fees.map((x) => x.amount)).toEqual([404.05, 16.47, 126.16]);
+    expect(fees[0].date).toBe('2026-10-25');
+  });
+  it('total of ticked spending matches the statement purchases', () => {
+    const spend = r.rows.filter((x) => !x.flag && x.kind === 'expense').reduce((a, x) => a + x.amount, 0);
+    expect(Math.round(spend * 100) / 100).toBe(Math.round((404.05 + 16.47 + 126.16 + 159.94 + 156.34 + 2190.3 + 1529.1 + 725.66 + 1211.31 + 1470.6) * 100) / 100);
+  });
+});
+
