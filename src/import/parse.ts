@@ -88,7 +88,21 @@ function money(rest: string) {
     .filter((x) => x.v !== null) as { raw: string; index: number; end: number; v: number }[];
 }
 
-export interface RawRow { date: string; amount: number; desc: string; signed: boolean; plusSuffix: boolean; amountsFirst: boolean }
+export interface RawRow { date: string; amount: number; desc: string; signed: boolean; plusSuffix: boolean; amountsFirst: boolean; installment?: string | null }
+
+/** Find an installment marker such as "3/6", "Taksit 3/6", "3/6 TAKSIT", "6 taksitin 3.sü" or "3. taksit". */
+export function findInstallment(text: string): { n: number; of: number | null } | null {
+  const masked = text.replace(INNER_DATE_RE, (m) => ' '.repeat(m.length));
+  let m = masked.match(/(\d{1,2})\s*taksit(?:in|ten)\s*(\d{1,2})/i);
+  if (m && +m[2] >= 1 && +m[2] <= +m[1] && +m[1] > 1) return { n: +m[2], of: +m[1] };
+  m = masked.match(INSTALLMENT_RE);
+  if (!m) return null;
+  const a = m[1] || m[3] || m[5];
+  const b = m[2] || m[4];
+  if (a && b && +a >= 1 && +a <= +b && +b > 1 && +b <= 48) return { n: +a, of: +b };
+  if (a && !b) return { n: +a, of: null };
+  return null;
+}
 
 /** Split one text row into date / signed amount / description. Returns null if it is not a transaction row. */
 export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null {
@@ -119,11 +133,24 @@ export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null 
   else {
     pick = ms.reduce((a, b) => (Math.abs(b.v) > Math.abs(a.v) ? b : a));
     if (ms.length > 1 && FOREIGN_RE.test(rest)) pick = ms[ms.length - 1];
+    // Installment purchase: banks print the full purchase amount and this month's installment
+    // (e.g. "MEDIAMARKT 3/6 12.000,00 2.000,00"). Only the installment belongs to this month.
+    const inst = findInstallment(rest);
+    if (inst && inst.of && ms.length >= 2) {
+      const total = Math.abs(pick.v);
+      const target = total / inst.of;
+      const others = ms.filter((x) => x !== pick);
+      const best = others.reduce((a, b) => (Math.abs(Math.abs(b.v) - target) < Math.abs(Math.abs(a.v) - target) ? b : a));
+      // accept when it is within 2% of total/n (banks round the last installment)
+      if (Math.abs(Math.abs(best.v) - target) <= Math.max(1, target * 0.02)) pick = best;
+    }
   }
   const descEnd = mode === 'account' ? pick.index : ms[0].index;
   const desc = rest.slice(0, descEnd).trim();
   const plusSuffix = /\+$/.test(pick.raw.trim().replace(/\s?(TL|TRY|₺)$/i, ''));
-  return { date, amount: pick.v, desc, signed: true, plusSuffix, amountsFirst: false };
+  const inst = findInstallment(rest);
+  const installment = inst ? (inst.of ? `${inst.n}/${inst.of}` : `${inst.n}.`) : null;
+  return { date, amount: pick.v, desc, signed: true, plusSuffix, amountsFirst: false, installment };
 }
 
 export function classify(raw: RawRow, mode: 'card' | 'account', fullDesc: string): ParsedRow | null {
@@ -133,13 +160,10 @@ export function classify(raw: RawRow, mode: 'card' | 'account', fullDesc: string
   description = cleanDescription(description);
   if (!description || description.length < 2) description = '—';
 
-  let installment: string | null = null;
-  const im = description.match(INSTALLMENT_RE);
-  if (im) {
-    const a = im[1] || im[3] || im[5];
-    const b = im[2] || im[4];
-    if (a && b && +a <= +b && +b > 1) installment = `${a}/${b}`;
-    else if (a && !b) installment = `${a}.`;
+  let installment: string | null = raw.installment ?? null;
+  if (!installment) {
+    const inst = findInstallment(description);
+    if (inst) installment = inst.of ? `${inst.n}/${inst.of}` : `${inst.n}.`;
   }
 
   const amount = Math.abs(raw.amount);

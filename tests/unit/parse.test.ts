@@ -122,3 +122,24 @@ describe('CSV', () => {
   });
   it('returns nothing for garbage', () => expect(parseCsvStatement('hello\nworld').rows).toHaveLength(0));
 });
+
+describe('installment purchases (taksitli işlemler)', () => {
+  const head = 'GARANTİ BBVA BONUS KART HESAP ÖZETİ\nHesap Kesim Tarihi: 20.10.2026  Son Ödeme Tarihi: 30.10.2026\n';
+  const r = (line: string) => parseStatementText(head + line).rows[0];
+  it('takes the monthly installment, not the full purchase amount', () => {
+    expect(r('12.08.2026 MEDIAMARKT ISTANBUL 3/6 12.000,00 2.000,00')).toMatchObject({ amount: 2000, installment: '3/6' });
+    expect(r('12.08.2026 MEDIAMARKT ISTANBUL 12.000,00 TL 3/6 TAKSIT 2.000,00 TL')).toMatchObject({ amount: 2000, installment: '3/6' });
+    expect(r('12.08.2026 APPLE STORE Taksit 2/12 54.999,00 4.583,25 45,83')).toMatchObject({ amount: 4583.25, installment: '2/12' });
+    expect(r('12.08.2026 TEKNOSA 6 Taksitin 4.sü 9.000,00 1.500,00')).toMatchObject({ amount: 1500, installment: '4/6' });
+  });
+  it('handles rounding of the last installment', () => {
+    expect(r('12.08.2026 IKEA 3/3 1.000,00 333,34')).toMatchObject({ amount: 333.34 });
+  });
+  it('keeps a single amount as is', () => {
+    expect(r('12.08.2026 TRENDYOL.COM 2/6 TAKSIT 833,33')).toMatchObject({ amount: 833.33, installment: '2/6' });
+  });
+  it('does not treat bonus points as the installment', () => {
+    expect(r('12.08.2026 MIGROS 1.245,30 12,45')).toMatchObject({ amount: 1245.3, installment: null });
+  });
+});
+
