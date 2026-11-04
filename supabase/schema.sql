@@ -115,6 +115,11 @@ begin
   return hid;
 end $$;
 
+-- Table access for signed-in users (rows are still filtered by the policies above).
+grant usage on schema public to authenticated;
+grant select on households, members to authenticated;
+grant select, insert, update, delete on categories, people, cards, txns, rules to authenticated;
+
 grant execute on function create_household(text) to authenticated;
 grant execute on function join_household(text) to authenticated;
 
