@@ -14,7 +14,7 @@ export function TxnRow({ t, onClick }: { t: Txn; onClick?: () => void }) {
     <button className="txn" onClick={onClick}>
       <span className="txn-icon" style={{ background: (c?.color || '#999') + '26' }}>{c?.icon || '❔'}</span>
       <span className="txn-main">
-        <span className="txn-title">{t.note || h.catName(c)}</span>
+        <span className="txn-title">{t.projected && <span className="badge-planned">{h.lang === 'tr' ? 'Planlanan' : 'Planned'}</span>}{t.note || h.catName(c)}</span>
         <span className="txn-sub">{t.note ? h.catName(c) + (sub ? ' · ' + sub : '') : sub}</span>
       </span>
       <span className={'txn-amt ' + t.kind}>{t.kind === 'income' ? '+' : '−'}{h.money(t.amount)}</span>

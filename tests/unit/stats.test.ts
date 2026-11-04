@@ -61,3 +61,50 @@ describe('payment month', () => {
   });
 });
 
+
+import { buildImport, planUndo, isInstallmentDuplicate } from '../../src/lib/installments';
+
+describe('installment planning', () => {
+  let n = 0;
+  const ctx = (payMonth: string, importId: string) => ({ cardId: 'g', personId: 'p1', payMonth, importId, now: '2026-11-04T00:00:00Z', uid: () => 'id' + n++ });
+  const row = (inst: string, amount = 2190.3) => ({ date: '2026-10-17', description: 'BAUHAUS İNŞAAT MALZEMELER', amount, kind: 'expense' as const, category: 'housing', installment: inst });
+
+  it('plans the remaining installments in the following payment months', () => {
+    const out = buildImport([row('1/6')], [], ctx('2026-11', 'imp1'));
+    expect(out).toHaveLength(6);
+    expect(out[0]).toMatchObject({ inst_no: 1, projected: false, pay_month: '2026-11' });
+    expect(out.slice(1).map((x) => [x.inst_no, x.pay_month, x.projected])).toEqual([
+      [2, '2026-12', true], [3, '2027-01', true], [4, '2027-02', true], [5, '2027-03', true], [6, '2027-04', true]]);
+    expect(totals(filterTxns(out, { month: '2027-01', basis: 'pay' })).expense).toBe(2190.3);
+  });
+
+  it('next statement replaces the planned installment instead of doubling it', () => {
+    const first = buildImport([row('1/6')], [], ctx('2026-11', 'imp1'));
+    const plannedDec = first.find((x) => x.inst_no === 2)!;
+    expect(isInstallmentDuplicate(row('2/6'), 'g', first)).toBe(false); // planned, not imported yet
+    const second = buildImport([row('2/6', 2190.29)], first, ctx('2026-12', 'imp2'));
+    expect(second).toHaveLength(1); // no new plans: 3..6 already exist
+    expect(second[0]).toMatchObject({ id: plannedDec.id, projected: false, import_id: 'imp2', pay_month: '2026-12', amount: 2190.29 });
+    // merge like the store does
+    const all = first.map((x) => (x.id === second[0].id ? second[0] : x));
+    expect(totals(filterTxns(all, { month: '2026-12', basis: 'pay' })).expense).toBe(2190.29);
+    expect(all.filter((x) => x.pay_month === '2026-12')).toHaveLength(1);
+    expect(isInstallmentDuplicate(row('2/6'), 'g', all)).toBe(true); // importing December again is a duplicate
+  });
+
+  it('undoing the newer import turns its row back into a plan', () => {
+    const first = buildImport([row('1/6')], [], ctx('2026-11', 'imp1'));
+    const second = buildImport([row('2/6')], first, ctx('2026-12', 'imp2'));
+    const all = first.map((x) => (x.id === second[0].id ? second[0] : x));
+    const u = planUndo(all.filter((x) => x.import_id === 'imp2'), all, 'imp2');
+    expect(u.remove).toEqual([]);
+    expect(u.restore[0]).toMatchObject({ inst_no: 2, projected: true, import_id: 'imp1' });
+    const u1 = planUndo(all.filter((x) => x.import_id === 'imp1'), all, 'imp1');
+    expect(u1.remove).toHaveLength(5); // inst 1 + plans 3..6
+  });
+
+  it('ignores rows without a full n/N installment', () => {
+    expect(buildImport([row('?/6')], [], ctx('2026-11', 'i'))).toHaveLength(1);
+    expect(buildImport([{ ...row('1/6'), kind: 'income' }], [], ctx('2026-11', 'i'))).toHaveLength(1);
+  });
+});

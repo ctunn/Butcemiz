@@ -38,9 +38,12 @@ export interface Txn {
   person_id: string | null;
   card_id: string | null; // null = cash / bank account
   note: string;
-  source: 'manual' | 'import';
+  source: 'manual' | 'import' | 'projected';
   import_id?: string | null;
   pay_month?: string | null; // YYYY-MM the card bill is paid in (budget month); null = purchase month
+  plan_key?: string | null; // identifies one installment purchase across statements
+  inst_no?: number | null; // which installment this row is (1..N)
+  projected?: boolean; // a future installment that has not appeared on a statement yet
   created_at: string;
 }
 

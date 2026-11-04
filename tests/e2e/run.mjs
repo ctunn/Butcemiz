@@ -826,8 +826,11 @@ tc('TC40', 'Ekstreler', 'Yapı Kredi credit-card PDF: preview, detection, credit
   await noHorizontalOverflow(page, 'import preview');
   await importBtn(page).click();
   await toastHas(page, '6 işlem kaydedildi');
-  const t = await txns(page);
+  const all = await txns(page);
+  const t = all.filter((x) => !x.projected);
   assert(t.length === 6 && t.every((x) => x.card_id === 'c-yk-p2' && x.person_id === 'p2' && x.source === 'import' && x.import_id === t[0].import_id), 'imported rows linked to card/person/import');
+  const planned = all.filter((x) => x.projected);
+  assert(planned.length === 4 && planned.every((x) => x.import_id === t[0].import_id && /TRENDYOL/.test(x.note)), `installments 3..6 of 2/6 planned ahead, got ${planned.length}`);
   assert(t.find((x) => /TRENDYOL/.test(x.note))?.note.includes('(2/6)'), 'installment kept in note');
   await visible(page.locator('ul.imports li', { hasText: 'Yapı Kredi Kart' }), 'listed under Önceki yüklemeler');
   // checked last so the rest of the flow is still exercised

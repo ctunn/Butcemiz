@@ -23,6 +23,7 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
   const basis = 'pay' as const;
   const monthTx = useMemo(() => filterTxns(data.txns, { month, personId: person, basis }), [data.txns, month, person, basis]);
   const tot = totals(monthTx);
+  const plannedSum = monthTx.filter((x) => x.projected && x.kind === 'expense').reduce((a, x) => a + x.amount, 0);
   const slices = useMemo(() => byCategory(monthTx.filter((x) => x.kind === kind), data.categories, prefs.lang), [monthTx, kind, data.categories, prefs.lang]);
   const trend = useMemo(() => monthlyTrend(filterTxns(data.txns, { personId: person }), month, 6, basis), [data.txns, person, month, basis]);
   const maxTrend = Math.max(1, ...trend.map((x) => Math.max(x.income, x.expense)));
@@ -52,6 +53,7 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
           );
         })}
       </div>
+      {plannedSum > 0 && <p className="muted small planned-note">{t('plannedNote', { amount: h.money(plannedSum, true) })}</p>}
 
 
       <section className="card">

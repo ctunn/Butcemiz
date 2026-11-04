@@ -230,3 +230,5 @@ details[open] { display: flex; flex-direction: column; gap: 10px; }
 .basis { display: flex; flex-direction: column; gap: 6px; }
 .basis .seg { display: flex; }
 .basis p { margin: 0 4px; }
+.badge-planned { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-radius: 6px; padding: 1px 6px; margin-right: 6px; vertical-align: 1px; }
+.planned-note { margin: -4px 4px 0; }

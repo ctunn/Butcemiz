@@ -59,6 +59,11 @@ create index if not exists txns_household_date on txns (household_id, date desc)
 alter table txns add column if not exists pay_month text;
 alter table cards add column if not exists cut_day int;
 alter table cards add column if not exists due_day int;
+-- v1.2: installment plans (future installments are planned and replaced by the real statement row).
+alter table txns add column if not exists plan_key text;
+alter table txns add column if not exists inst_no int;
+alter table txns add column if not exists projected boolean not null default false;
+alter table txns drop constraint if exists txns_source_check;
 
 create table if not exists rules (
   household_id uuid not null references households(id) on delete cascade,
