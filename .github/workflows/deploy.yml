@@ -22,11 +22,7 @@ jobs:
       - run: npm ci
       - run: npx vitest run
       - run: npm run build
-        env:
-          # Optional: set these in Settings → Secrets and variables → Actions → Variables
-          # so both phones connect to sync without typing anything.
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+        # Supabase URL and publishable key come from .env.production (both are public by design).
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
