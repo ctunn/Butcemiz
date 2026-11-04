@@ -1,0 +1,24 @@
+import type { BankId } from '../types';
+import { parseCsvStatement } from './csv';
+import { parseStatementLines, detectBank, type ParseResult } from './parse';
+
+export async function parseStatementFile(file: File, password?: string, bankHint?: BankId): Promise<ParseResult> {
+  const name = file.name.toLowerCase();
+  const buf = await file.arrayBuffer();
+  const isPdf = name.endsWith('.pdf') || file.type === 'application/pdf' || new TextDecoder().decode(buf.slice(0, 5)) === '%PDF-';
+  if (isPdf) {
+    const { pdfToLines } = await import('./pdf');
+    const lines = await pdfToLines(buf, password);
+    return parseStatementLines(lines, bankHint);
+  }
+  const text = decodeText(buf);
+  const res = parseCsvStatement(text);
+  return { bank: detectBank(file.name + ' ' + text.slice(0, 3000)), ...res };
+}
+
+/** UTF-8 with fallback to Windows-1254 (Turkish), which many bank exports still use. */
+export function decodeText(buf: ArrayBuffer): string {
+  const utf = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  if (!utf.includes('�')) return utf;
+  try { return new TextDecoder('windows-1254').decode(buf); } catch { return utf; }
+}

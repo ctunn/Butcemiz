@@ -1,0 +1,259 @@
+{
+ "categories": [
+  {
+   "id": "groceries",
+   "name_en": "Groceries",
+   "name_tr": "Market",
+   "icon": "🛒",
+   "color": "#59A14F",
+   "kind": "expense"
+  },
+  {
+   "id": "dining",
+   "name_en": "Dining & Cafe",
+   "name_tr": "Yeme & İçme",
+   "icon": "🍽️",
+   "color": "#F28E2B",
+   "kind": "expense"
+  },
+  {
+   "id": "transport",
+   "name_en": "Transport & Fuel",
+   "name_tr": "Ulaşım & Yakıt",
+   "icon": "⛽",
+   "color": "#4E79A7",
+   "kind": "expense"
+  },
+  {
+   "id": "bills",
+   "name_en": "Bills & Utilities",
+   "name_tr": "Faturalar",
+   "icon": "💡",
+   "color": "#EDC948",
+   "kind": "expense"
+  },
+  {
+   "id": "housing",
+   "name_en": "Rent & Home",
+   "name_tr": "Kira & Ev",
+   "icon": "🏠",
+   "color": "#9C755F",
+   "kind": "expense"
+  },
+  {
+   "id": "shopping",
+   "name_en": "Shopping",
+   "name_tr": "Alışveriş",
+   "icon": "🛍️",
+   "color": "#B07AA1",
+   "kind": "expense"
+  },
+  {
+   "id": "health",
+   "name_en": "Health",
+   "name_tr": "Sağlık",
+   "icon": "💊",
+   "color": "#E15759",
+   "kind": "expense"
+  },
+  {
+   "id": "entertainment",
+   "name_en": "Entertainment",
+   "name_tr": "Eğlence",
+   "icon": "🎬",
+   "color": "#FF9DA7",
+   "kind": "expense"
+  },
+  {
+   "id": "subscriptions",
+   "name_en": "Subscriptions",
+   "name_tr": "Abonelikler",
+   "icon": "📺",
+   "color": "#76B7B2",
+   "kind": "expense"
+  },
+  {
+   "id": "education",
+   "name_en": "Education",
+   "name_tr": "Eğitim",
+   "icon": "📚",
+   "color": "#5FA2CE",
+   "kind": "expense"
+  },
+  {
+   "id": "kids",
+   "name_en": "Kids",
+   "name_tr": "Çocuk",
+   "icon": "🧸",
+   "color": "#D37295",
+   "kind": "expense"
+  },
+  {
+   "id": "travel",
+   "name_en": "Travel",
+   "name_tr": "Seyahat",
+   "icon": "✈️",
+   "color": "#86BCB6",
+   "kind": "expense"
+  },
+  {
+   "id": "personal",
+   "name_en": "Personal Care",
+   "name_tr": "Kişisel Bakım",
+   "icon": "💇",
+   "color": "#B6992D",
+   "kind": "expense"
+  },
+  {
+   "id": "pets",
+   "name_en": "Pets",
+   "name_tr": "Evcil Hayvan",
+   "icon": "🐾",
+   "color": "#8CD17D",
+   "kind": "expense"
+  },
+  {
+   "id": "gifts",
+   "name_en": "Gifts",
+   "name_tr": "Hediye",
+   "icon": "🎁",
+   "color": "#A0CBE8",
+   "kind": "expense"
+  },
+  {
+   "id": "fees",
+   "name_en": "Bank Fees",
+   "name_tr": "Banka Masrafları",
+   "icon": "🏦",
+   "color": "#86BCB6",
+   "kind": "expense"
+  },
+  {
+   "id": "loan",
+   "name_en": "Loan Payments",
+   "name_tr": "Kredi Ödemeleri",
+   "icon": "📉",
+   "color": "#9C755F",
+   "kind": "expense"
+  },
+  {
+   "id": "other",
+   "name_en": "Other",
+   "name_tr": "Diğer",
+   "icon": "📦",
+   "color": "#BAB0AC",
+   "kind": "expense"
+  },
+  {
+   "id": "salary",
+   "name_en": "Salary",
+   "name_tr": "Maaş",
+   "icon": "💼",
+   "color": "#59A14F",
+   "kind": "income"
+  },
+  {
+   "id": "bonus",
+   "name_en": "Bonus",
+   "name_tr": "Prim",
+   "icon": "⭐",
+   "color": "#EDC948",
+   "kind": "income"
+  },
+  {
+   "id": "rental_income",
+   "name_en": "Rental Income",
+   "name_tr": "Kira Geliri",
+   "icon": "🏘️",
+   "color": "#4E79A7",
+   "kind": "income"
+  },
+  {
+   "id": "other_income",
+   "name_en": "Other Income",
+   "name_tr": "Diğer Gelir",
+   "icon": "💰",
+   "color": "#BAB0AC",
+   "kind": "income"
+  }
+ ],
+ "people": [
+  {
+   "id": "p1",
+   "name": "Ben",
+   "color": "#4E79A7"
+  },
+  {
+   "id": "p2",
+   "name": "Eşim",
+   "color": "#E15759"
+  }
+ ],
+ "cards": [
+  {
+   "id": "c-isbank-p1",
+   "name": "İş Bankası Kart",
+   "bank": "isbank",
+   "person_id": "p1",
+   "kind": "card"
+  },
+  {
+   "id": "c-garanti-p1",
+   "name": "Garanti Kart",
+   "bank": "garanti",
+   "person_id": "p1",
+   "kind": "card"
+  },
+  {
+   "id": "c-qnb-p1",
+   "name": "QNB Kart",
+   "bank": "qnb",
+   "person_id": "p1",
+   "kind": "card"
+  },
+  {
+   "id": "a-isbank-p1",
+   "name": "İş Bankası Hesap",
+   "bank": "isbank",
+   "person_id": "p1",
+   "kind": "account"
+  },
+  {
+   "id": "a-garanti-p1",
+   "name": "Garanti Hesap",
+   "bank": "garanti",
+   "person_id": "p1",
+   "kind": "account"
+  },
+  {
+   "id": "c-yk-p2",
+   "name": "Yapı Kredi Kart",
+   "bank": "yapikredi",
+   "person_id": "p2",
+   "kind": "card"
+  },
+  {
+   "id": "c-isbank-p2",
+   "name": "İş Bankası Kart",
+   "bank": "isbank",
+   "person_id": "p2",
+   "kind": "card"
+  }
+ ],
+ "txns": [
+  {
+   "id": "2bc3d46b-53ab-44a4-9e81-4147c2e264f6",
+   "kind": "expense",
+   "amount": 77.7,
+   "date": "2026-11-04",
+   "category_id": "other",
+   "person_id": "p1",
+   "card_id": null,
+   "note": "Yedeklenecek",
+   "source": "manual",
+   "import_id": null,
+   "created_at": "2026-11-04T10:08:26.228Z"
+  }
+ ],
+ "rules": []
+}

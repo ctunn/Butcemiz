@@ -1,0 +1,14 @@
+YAPI KREDİ BANKASI A.Ş.  WORLD CARD HESAP ÖZETİ
+Hesap Kesim Tarihi: 20.10.2026   Son Ödeme Tarihi: 30.10.2026
+Dönem Borcu: 4.512,40 TL   Asgari Ödeme Tutarı: 1.804,96 TL
+İşlem Tarihi   Açıklama                      Tutar        Worldpuan
+21.09.2026     MIGROS SANAL MARKET ISTANBUL  1.245,30     12,45
+23.09.2026     YEMEKSEPETI                    389,90       3,90
+25.09.2026     SHELL KADIKOY                  1.500,00     15,00
+28.09.2026     TRENDYOL.COM  2/6 TAKSIT       833,33
+01.10.2026     ÖDEMENİZ İÇİN TEŞEKKÜR EDERİZ  -3.000,00
+03.10.2026     NETFLIX.COM  USD 9,99          319,68
+05.10.2026     IADE - ZARA ISTANBUL           250,00+
+07.10.2026     ECZANE DENIZ
+               224,19
+Toplam Harcama 4.512,40

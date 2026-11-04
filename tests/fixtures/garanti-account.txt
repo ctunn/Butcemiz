@@ -1,0 +1,18 @@
+INTERNET_SUBE_HESAP_HAREKETLERI
+T. Garanti Bankası A.Ş. Genel Müdürlük: Nispetiye Mah. www.garantibbva.com.tr
+Sayın AD SOYAD, 24 Eylül 2026 tarihi saat 15:16 itibarıyla 24/06/2026 - 24/09/2026 tarihleri arasındaki Hesap Hareketleri bilgileriniz aşağıdaki gibidir.
+Ad Soyad / Unvan : Bakiye : 50,01 TL
+Kullanılabilir Bakiye : 5.050,01 TL
+Tarih Açıklama Etiket Tutar Bakiye
+15.09.2026 Agustos 2026 MKK Kurumuna Ödenen Ücret Faiz / Komisyon -5,80 TL 50,01 TL
+07.09.2026 Ad Soyad-FAST-CEP ŞUBE-1000000001 Para Transferi -50,00 TL 55,81 TL
+04.09.2026 K.Kartı Ödeme 4000 **** **** 0000 Kart Ödemesi -3.917,17 TL 105,81 TL
+04.09.2026 AD SOYAD--HVL-CEP ŞUBE Para Transferi +1.500,00 TL 4.022,98 TL
+04.09.2026 YATIRIM FON SATIŞINDAN KESİLEN STOPAJ TUTARI Faiz / Komisyon -665,74 TL 2.522,98 TL
+04.09.2026 GPY 1. PARA PİYASA 1.111.111 FON SATIŞ CEP ŞUBE Yatırım +2.170,33 TL 3.188,72 TL
+01.09.2026 MAAŞ ÖDEMESİ Maaş +17.419,42 TL 17.976,93 TL
+05.08.2026 KESİNTİ VE EKLERİ- Diğer -16,76 TL 584,58 TL
+14.07.2026 ornek apartman yöneticiliği-6 NUMARA AİDAT -FAST-CEP
+ŞUBE-1000000002 Para Transferi -2.000,00 TL 31,50 TL
+07.07.2026 Maaş promosyon ödemesi Diğer +7.212,12 TL 7.212,78 TL
+1 / 2

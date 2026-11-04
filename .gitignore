@@ -1,0 +1,8 @@
+node_modules
+dist
+*.local
+.env
+test-results
+tests/private
+dist-preview
+tests/e2e/report
