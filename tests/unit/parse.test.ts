@@ -194,3 +194,29 @@ describe('Garanti Bonus card statement layout', () => {
   });
 });
 
+
+describe('Yapı Kredi card: Kalan Tutar/Taksit column and installment note line', () => {
+  const L = (text: string, y: number) => ({ text, y, page: 1 });
+  const lines = [
+    L('Hesap Kesim Tarihi : 27 Ekim 2026', 700),
+    L('Son Ödeme Tarihi : 6 Kasım 2026', 690),
+    L('İşlem Tarihi  İşlemler  Tutar(TL)  Kalan Tutar/Taksit  Puan', 500),
+    L('08 Ekim 2026  MARKET A  İSTANBUL  TR  224,00  9', 480),
+    L('10 Ekim 2026  MAGAZA B  İSTANBUL  TR  733,13  5.131,84 / 7  587', 470),
+    L("5.864,97 TL'lik işlemin 1 / 8 taksidi", 460),
+    L('15 Ekim 2026  ONLINE C  ISTANBUL  TR  1.183,68  2.367,38 / 2  71', 450),
+    L("3.551,06 TL'lik işlemin 1 / 3 taksidi", 440),
+    L('TOPLAM  2.140,81  667', 420),
+  ];
+  const r = parseStatementLines(lines, 'yapikredi');
+  it('takes this month\'s installment, not the remaining balance', () => {
+    expect(r.rows.map((x) => x.amount)).toEqual([224, 733.13, 1183.68]);
+    expect(r.rows.reduce((a, x) => a + x.amount, 0)).toBeCloseTo(2140.81, 2);
+  });
+  it('reads n/N from the note line under the row', () => {
+    expect(r.rows.map((x) => x.installment)).toEqual([null, '1/8', '1/3']);
+  });
+  it('keeps the statement dates', () => {
+    expect([r.cutDate, r.dueDate]).toEqual(['2026-10-27', '2026-11-06']);
+  });
+});

@@ -84,6 +84,9 @@ export function cleanDescription(s: string): string {
 }
 
 // Garanti-style installment column: "2.190,30x6=13.141,80 1.Taksit" (installment x count = total, nth installment).
+const REMAINING_RE = /\d{1,3}(?:\.\d{3})*,\d{2}\s*\/\s*\d{1,2}(?!\d)/g;
+/** Yapı Kredi note under an installment row: "5.864,97 TL'lik işlemin 1 / 8 taksidi". */
+const INST_NOTE_RE = /tl['’]?\s*l[iı]k\s+islemin\s+(\d{1,2})\s*\/\s*(\d{1,2})\s+taksid/;
 const INST_X_RE = /(\d{1,3}(?:\.\d{3})*,\d{2})\s*[xX×]\s*(\d{1,2})\s*=\s*(\d{1,3}(?:\.\d{3})*,\d{2})(\s*(\d{1,2})\s*\.?\s*taksit)?/i;
 // Card statement interest/tax lines printed without a date.
 const FEE_LINE = /^(donem faizi|gec odeme faizi|gecikme faizi|akdi faiz|kkdf|bsmv|yillik kart (ucreti|aidati)|kart aidati|ekstre ucreti|nakit avans faizi)/;
@@ -137,6 +140,8 @@ export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null 
       instX = xm[5] ? `${xm[5]}/${xm[2]}` : `?/${xm[2]}`;
       rest = rest.slice(0, xm.index!) + ' '.repeat(xm[0].length) + rest.slice(xm.index! + xm[0].length);
     }
+    // Yapı Kredi "Kalan Tutar / Taksit" column ("5.131,84 / 7"): what is still owed later, not this month's amount.
+    rest = rest.replace(REMAINING_RE, (m) => ' '.repeat(m.length));
   }
   const ms = money(rest);
   if (!ms.length) return null;
@@ -233,7 +238,16 @@ export function parseStatementLines(lines: Line[], bankHint?: BankId): ParseResu
       raw = splitRow(text + ' ' + lines[i + 1].text, mode);
       if (raw) { used.add(i + 1); }
     }
-    if (raw) { anchors.push({ idx: i, raw, extra: [] }); used.add(i); }
+    if (raw) {
+      anchors.push({ idx: i, raw, extra: [] }); used.add(i);
+      const next = lines[i + 1];
+      const nm = mode === 'card' && next && next.page === lines[i].page ? fold(next.text).match(INST_NOTE_RE) : null;
+      if (nm && +nm[1] >= 1 && +nm[1] <= +nm[2] && +nm[2] > 1) {
+        if (!raw.installment) raw.installment = `${+nm[1]}/${+nm[2]}`;
+        used.add(i + 1);
+        i++;
+      }
+    }
     else if (LEADING_DATE.test(text) && money(text).length) skipped++;
   }
 
