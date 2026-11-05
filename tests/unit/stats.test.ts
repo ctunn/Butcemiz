@@ -161,7 +161,8 @@ describe('monthly repeat (loan) and the Home group', () => {
     ];
     const home = filterTxns(rows, { month: '2026-10', personId: HOME_GROUP });
     expect(home.map((x) => x.id)).toEqual(['a', 'b']);
-    expect(filterTxns(rows, { month: '2026-10', personId: 'p1' }).map((x) => x.id)).toEqual(['a', 'c']);
+    expect(filterTxns(rows, { month: '2026-10', personId: 'p1' }).map((x) => x.id)).toEqual(['c']); // Ev rows belong to the home, not to who paid
+    expect(filterTxns(rows, { month: '2026-10' })).toHaveLength(3); // everyone still sees all
   });
 
   it('existing households get the new home categories', () => {

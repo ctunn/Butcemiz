@@ -8,6 +8,7 @@ import { TxnRow } from '../components/TxnRow';
 import { Empty } from '../components/ui';
 import { dayLabel, todayISO } from '../lib/dates';
 import { fold } from '../lib/text';
+import { HOME_GROUP } from '../lib/defaults';
 import { totals, txnMonth } from '../lib/stats';
 import type { Txn } from '../types';
 
@@ -23,7 +24,7 @@ export function Transactions({ month, setMonth, onEdit }: { month: string; setMo
   const list = useMemo(() => {
     const fq = fold(q.trim());
     return data.txns
-      .filter((x) => (allMonths || txnMonth(x, 'pay') === month) && (!person || x.person_id === person) &&
+      .filter((x) => (allMonths || txnMonth(x, 'pay') === month) && (!person || (person === HOME_GROUP ? !!x.shared : x.person_id === person && !x.shared)) &&
         (!card || (card === 'cash' ? !x.card_id : x.card_id === card)) &&
         (!fq || fold(x.note + ' ' + h.catName(h.cat(x.category_id)) + ' ' + String(x.amount) + ' ' + h.money(x.amount)).includes(fq)))
       .sort((a, b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at));

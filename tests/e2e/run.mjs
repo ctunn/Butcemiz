@@ -1053,6 +1053,12 @@ tc('TC53', 'Ev ortak', 'Ev Faturaları turns on the shared switch; Ev chip shows
   await expectText(stat(page, 'Gider'), '₺1.200', 'everyone total');
   await page.getByRole('button', { name: /Ev$/ }).first().click();
   await expectText(stat(page, 'Gider'), '₺900', 'Ev total only shared');
+  await page.getByRole('button', { name: /Ben$/ }).first().click();
+  await expectText(stat(page, 'Gider'), '₺300', 'Ben total leaves the Ev expense out');
+  await tab(page, 'İşlemler');
+  await page.getByRole('button', { name: /Ev$/ }).first().click();
+  assert((await page.locator('.txn').count()) === 1, 'Transactions Ev chip lists only the shared row');
+  await tab(page, 'Özet');
   const t = await txns(page);
   assert(t.find((x) => x.amount === 900).shared === true && !t.find((x) => x.amount === 300).shared, 'shared flag stored');
 }, { shot: true });
