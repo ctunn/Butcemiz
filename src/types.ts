@@ -60,7 +60,11 @@ export interface ShopItem {
   done: boolean;
   person_id: string | null; // who added it
   created_at: string;
+  list?: ShopList; // missing = daily
+  price?: number | null; // rough price for wish / needed items
 }
+
+export type ShopList = 'daily' | 'wish' | 'needed';
 
 export interface Data {
   categories: Category[];

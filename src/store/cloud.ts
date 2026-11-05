@@ -59,6 +59,7 @@ export class CloudBackend implements Backend {
       d[t] = (results[i].data || []).map(({ household_id, ...rest }: any) => rest);
     });
     d.txns = d.txns.map((t: any) => ({ ...t, amount: Number(t.amount) }));
+    d.shopping = d.shopping.map((x: any) => ({ ...x, price: x.price == null ? null : Number(x.price) }));
     writeLocal(d); // offline cache
     return d as Data;
   }
@@ -71,6 +72,11 @@ export class CloudBackend implements Backend {
     }
     const payload = (rows as any[]).map((r) => ({ ...r, household_id: this.householdId }));
     let { error } = await this.s.from(table).upsert(payload, { onConflict: 'household_id,id' });
+    // shopping list columns added later: saving without them would put items on the wrong list
+    if (error && table === 'shopping' && /\b(list|price)\b/.test(error.message || '')) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('budget-schema-old'));
+      throw new Error('schemaOld');
+    }
     // Database not yet updated with the v1.1 columns: save without them rather than failing.
     if (error && /pay_month|cut_day|due_day|plan_key|inst_no|projected|shared/.test(error.message || '')) {
       // planned installments can't be told apart without the new columns, so they are skipped

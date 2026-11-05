@@ -252,3 +252,7 @@ details[open] { display: flex; flex-direction: column; gap: 10px; }
 .shop-name { flex: 1; min-width: 0; font-size: 17px; overflow-wrap: anywhere; }
 .shop-item.done .shop-name { text-decoration: line-through; color: var(--muted); }
 .shop-del { flex: none; width: 40px; height: 40px; display: grid; place-items: center; color: var(--muted); background: none; border: 0; border-radius: 10px; }
+.shop-add .shop-price-in { flex: 0 0 92px; font-size: 16px; padding-left: 10px; padding-right: 10px; }
+.shop-price { flex: none; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.shop-total { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.screen > .seg + .shop-add, .screen > .segmented + .shop-add { margin-top: 12px; }

@@ -1117,6 +1117,18 @@ tc('TC56', 'Alışveriş listesi', 'Add "süt, ekmek", tick one, clear bought; f
   await page.waitForTimeout(300);
   s = await page.evaluate(() => JSON.parse(localStorage.getItem('budget-data-v1')).shopping);
   assert(s.length === 1 && s[0].name === 'ekmek', `bought item cleared: ${JSON.stringify(s)}`);
+  // wishlist with a rough price
+  await page.getByRole('tab', { name: /İstekler/ }).click();
+  await visible(page.getByText('Liste boş'), 'wishlist empty');
+  await page.getByLabel('Listeye ekle').first().fill('Robot süpürge');
+  await page.getByLabel('₺ fiyat').fill('15.000');
+  await page.getByRole('button', { name: 'Listeye ekle' }).click();
+  await visible(page.getByText('Robot süpürge'), 'wish item');
+  await expectText(page.locator('.shop-total'), '15.000', 'wishlist total');
+  assert(!(await page.getByText('ekmek').isVisible()), 'daily item not on the wishlist');
+  s = await page.evaluate(() => JSON.parse(localStorage.getItem('budget-data-v1')).shopping);
+  assert(s.find((x) => x.name === 'Robot süpürge').list === 'wish' && s.find((x) => x.name === 'Robot süpürge').price === 15000, 'stored on wish list with price');
+  await noHorizontalOverflow(page, 'wishlist');
 }, { shot: true });
 
 tc('TC52', 'Düzen', 'Very long number typed in the amount field does not push the sheet wider than 393px', async ({ page }) => {

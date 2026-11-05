@@ -83,6 +83,9 @@ create table if not exists shopping (
   created_at timestamptz not null default now(),
   primary key (household_id, id)
 );
+-- v1.5: three lists (daily, wish, needed) and a rough price.
+alter table shopping add column if not exists list text not null default 'daily';
+alter table shopping add column if not exists price numeric(14,2);
 
 -- Row level security: you can only see rows of the household you belong to.
 create or replace function my_household_ids() returns setof uuid
