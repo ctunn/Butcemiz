@@ -28,11 +28,11 @@ export function findDuplicates(txns: Txn[]): Txn[] {
     const surplus = Math.max(0, l.length - keep);
     extra.push(...rest.slice(0, Math.min(surplus, rest.length)));
   }
-  // a planned installment that is already on a statement (same plan and number, or same plan and month)
+  // a planned installment that is already on a statement (same plan and installment number)
   const real = txns.filter((x) => !x.projected && x.plan_key);
   for (const x of txns) {
     if (!x.projected || !x.plan_key) continue;
-    if (real.some((r) => r.plan_key === x.plan_key && (r.inst_no === x.inst_no || (r.pay_month || r.date.slice(0, 7)) === (x.pay_month || x.date.slice(0, 7))))) extra.push(x);
+    if (real.some((r) => r.plan_key === x.plan_key && r.inst_no === x.inst_no)) extra.push(x);
   }
   return extra;
 }

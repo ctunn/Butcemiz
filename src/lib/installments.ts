@@ -122,7 +122,70 @@ export function noteInstallment(note: string | null | undefined): { n: number; o
  * and add the missing future months. Planned ids are derived from the row id, so running this on
  * both phones at once cannot create two copies. Returns rows to save.
  */
-export function repairPlans(txns: Txn[]): Txn[] {
+export function repairPlans(txns: Txn[]): { upsert: Txn[]; remove: string[] } {
+  const legacy = adoptLegacy(txns);
+  const merged = new Map(txns.map((x) => [x.id, x]));
+  for (const x of legacy) merged.set(x.id, x);
+  const all = [...merged.values()];
+  const changed = new Map<string, Txn>(legacy.map((x) => [x.id, x]));
+  const remove = new Set<string>();
+  const put = (x: Txn) => { changed.set(x.id, x); merged.set(x.id, x); };
+
+  const groups = new Map<string, Txn[]>();
+  for (const x of all) if (x.plan_key && x.inst_no) { const g = groups.get(x.plan_key); if (g) g.push(x); else groups.set(x.plan_key, [x]); }
+
+  for (const [key, g] of groups) {
+    const real = g.filter((x) => !x.projected).sort((a, b) => (a.inst_no || 0) - (b.inst_no || 0));
+    const planned = g.filter((x) => x.projected);
+    // a planned copy of an installment that is already real
+    for (const p of planned) if (real.some((r) => r.inst_no === p.inst_no)) remove.add(p.id);
+    if (isRecurringKey(key)) {
+      // monthly series: fill gaps up to the last month the user asked for, follow the latest real row
+      const first = [...g].sort((a, b) => (a.inst_no || 0) - (b.inst_no || 0))[0];
+      const total = Math.max(...g.map((x) => x.inst_no || 0));
+      const last = real[real.length - 1];
+      for (let k = 2; k <= total; k++) {
+        const have = g.filter((x) => x.inst_no === k && !remove.has(x.id));
+        have.filter((x) => x.projected).slice(have.some((x) => !x.projected) ? 0 : 1).forEach((x) => remove.add(x.id));
+        if (have.length) {
+          const p = have.find((x) => x.projected && !remove.has(x.id));
+          if (p && last && (last.inst_no || 0) < k && (p.category_id !== last.category_id || !!p.shared !== !!last.shared)) put({ ...p, category_id: last.category_id, shared: !!last.shared });
+          continue;
+        }
+        const id = `${first.id}-r${k}`;
+        if (merged.has(id)) continue;
+        put({ ...(last || first), id, source: 'projected', projected: true, import_id: null, inst_no: k, plan_key: key,
+          date: addMonths(first.date, k - (first.inst_no || 1)), pay_month: first.pay_month ? shiftMonth(first.pay_month, k - (first.inst_no || 1)) : null, note: first.note });
+      }
+      continue;
+    }
+    // installment purchase: anchor on the latest installment that came from a statement
+    const anchor = real[real.length - 1];
+    if (!anchor) continue;
+    const of = Number(key.split('|')[2]);
+    if (!of) continue;
+    const desc = (anchor.note || '').replace(/\s*\(\d{1,2}\/\d{1,2}\)\s*$/, '');
+    const start = anchor.pay_month || anchor.date.slice(0, 7);
+    for (let k = (anchor.inst_no || 0) + 1; k <= of; k++) {
+      const want = { pay_month: shiftMonth(start, k - (anchor.inst_no || 0)), category_id: anchor.category_id, shared: !!anchor.shared };
+      const have = planned.filter((x) => x.inst_no === k && !remove.has(x.id));
+      have.slice(1).forEach((x) => remove.add(x.id));
+      const p = have[0];
+      if (p) {
+        if (p.pay_month !== want.pay_month || p.category_id !== want.category_id || !!p.shared !== want.shared) put({ ...p, ...want });
+        continue;
+      }
+      const id = `${anchor.id}-p${k}`;
+      if (merged.has(id)) continue;
+      put({ ...anchor, ...want, id, source: 'projected', projected: true, plan_key: key, inst_no: k, note: `${desc} (${k}/${of})` });
+    }
+  }
+  for (const id of remove) changed.delete(id);
+  return { upsert: [...changed.values()], remove: [...remove] };
+}
+
+/** Rows with "(n/N)" in the note but no plan (saved before plans existed) get their plan key. */
+function adoptLegacy(txns: Txn[]): Txn[] {
   const out: Txn[] = [];
   const known = (card: string | null, mk: string, of: number, n: number, amount: number) =>
     [...txns, ...out].some((x) => x.plan_key && !isRecurringKey(x.plan_key) && (x.card_id || null) === card && x.inst_no === n
@@ -134,15 +197,11 @@ export function repairPlans(txns: Txn[]): Txn[] {
     const desc = x.note.replace(/\s*\(\d{1,2}\/\d{1,2}\)\s*$/, '');
     const key = planKey(x.card_id, x.date, inst.of, x.amount, desc);
     const mk = merchantKey(desc);
-    const start = x.pay_month || x.date.slice(0, 7);
-    out.push({ ...x, plan_key: key, inst_no: inst.n });
-    for (let k = inst.n + 1; k <= inst.of; k++) {
-      if (known(x.card_id, mk, inst.of, k, x.amount)) continue;
-      out.push({
-        ...x, id: `${x.id}-p${k}`, source: 'projected', projected: true, plan_key: key, inst_no: k,
-        pay_month: shiftMonth(start, k - inst.n), note: `${desc} (${k}/${inst.of})`,
-      });
-    }
+    // join the plan this purchase already has (another month imported later), else start one
+    const other = txns.find((y) => y.plan_key && !isRecurringKey(y.plan_key) && (y.card_id || null) === (x.card_id || null)
+      && +y.plan_key.split('|')[2] === inst.of && y.plan_key.split('|').slice(4).join('|') === mk && Math.abs(y.amount - x.amount) <= 1);
+    void known;
+    out.push({ ...x, plan_key: other?.plan_key || key, inst_no: inst.n });
   }
   return out;
 }
@@ -156,7 +215,7 @@ export function recurringInfo(t: Txn): { n: number; of: number } | null {
   return of ? { n: t.inst_no, of } : null;
 }
 
-function addMonths(date: string, k: number): string {
+export function addMonths(date: string, k: number): string {
   const [y, m, d] = date.split('-').map(Number);
   const last = new Date(y, m - 1 + k + 1, 0).getDate();
   const x = new Date(y, m - 1 + k, Math.min(d, last));

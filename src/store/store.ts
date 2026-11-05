@@ -41,8 +41,7 @@ export const store = {
       const add = missingDefaultCats(data.categories);
       if (add.length) await store.upsert('categories', add).catch(() => {});
       // installment rows saved before plans existed get their future months
-      const fix = repairPlans(data.txns);
-      if (fix.length) await store.upsert('txns', fix).catch(() => {});
+      await store.repairPlans().catch(() => {});
       unsub = b.subscribe ? b.subscribe(() => store.reload()) : null;
     } catch (e: any) {
       set({ syncing: false, error: e?.message || String(e) });
@@ -91,6 +90,14 @@ export const store = {
   },
 
   clearError() { set({ error: null }); },
+
+  /** Bring installment plans and monthly series back in order (missing months, wrong month, stale copies). */
+  async repairPlans(): Promise<number> {
+    const { upsert, remove } = repairPlans(state.data.txns);
+    if (upsert.length) await store.upsert('txns', upsert);
+    if (remove.length) await store.remove('txns', remove);
+    return upsert.length + remove.length;
+  },
 };
 
 if (typeof window !== 'undefined') window.addEventListener('budget-schema-old', () => set({ error: 'schemaOld' }));

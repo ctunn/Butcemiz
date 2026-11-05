@@ -1075,6 +1075,31 @@ tc('TC54', 'Kredi', 'Repeat monthly plans the next months as Planlanan', async (
   assert(t.length === 4 && t.filter((x) => x.projected).length === 3 && new Set(t.map((x) => x.date.slice(0, 7))).size === 4, `4 rows in 4 months: ${JSON.stringify(t.map((x) => [x.date, x.projected]))}`);
 });
 
+tc('TC55', 'Kredi', 'Series length can be changed later from the first payment', async ({ page }) => {
+  let dlg = await openAdd(page);
+  await dlg.getByLabel('Tutar').fill('2000');
+  await dlg.getByRole('button', { name: 'Kira & Ev' }).click();
+  await dlg.getByLabel('Not (isteğe bağlı)').fill('Aidat');
+  await dlg.getByLabel('Kaç ay daha').selectOption('3');
+  await dlg.getByRole('button', { name: 'Kaydet' }).click();
+  await hidden(dlg, 'sheet closes');
+  await tab(page, 'İşlemler');
+  await page.getByRole('button', { name: /Aidat/ }).first().click();
+  dlg = page.getByRole('dialog');
+  await dlg.getByLabel(/toplam kaç ay/).selectOption('6');
+  await dlg.getByRole('button', { name: 'Kaydet' }).click();
+  await hidden(dlg, 'sheet closes');
+  let t = await txns(page);
+  assert(t.length === 6 && new Set(t.map((x) => x.inst_no)).size === 6 && t.every((x) => x.shared), `6 months, all Ev: ${JSON.stringify(t.map((x) => [x.inst_no, x.date, x.shared]))}`);
+  await page.getByRole('button', { name: /Aidat/ }).first().click();
+  dlg = page.getByRole('dialog');
+  await dlg.getByLabel(/toplam kaç ay/).selectOption('2');
+  await dlg.getByRole('button', { name: 'Kaydet' }).click();
+  await hidden(dlg, 'sheet closes');
+  t = await txns(page);
+  assert(t.length === 2, `shortened to 2: ${t.length}`);
+});
+
 tc('TC52', 'Düzen', 'Very long number typed in the amount field does not push the sheet wider than 393px', async ({ page }) => {
   const dlg = await openAdd(page);
   await dlg.getByLabel('Tutar').fill('123456789012345678,99');

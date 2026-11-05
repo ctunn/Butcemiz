@@ -235,21 +235,43 @@ describe('duplicate finder: planned copies', () => {
   });
 });
 
-describe('repair installment rows saved before plans existed', () => {
-  const old = (id: string, note: string, extra: Partial<Txn> = {}): Txn => ({ id, kind: 'expense', amount: 2190.3, date: '2026-10-17', category_id: 'home_shopping', person_id: 'p1', card_id: 'g', note, source: 'import', import_id: 'i0', created_at: 'x', pay_month: '2026-11', shared: true, ...extra });
-  it('adds the missing months with the same category and Ev flag', () => {
-    const fix = repairPlans([old('a', 'BAUHAUS İNŞAAT (2/6)')]);
-    expect(fix.map((x) => [x.id, x.inst_no, x.pay_month, !!x.projected])).toEqual([
-      ['a', 2, '2026-11', false], ['a-p3', 3, '2026-12', true], ['a-p4', 4, '2027-01', true], ['a-p5', 5, '2027-02', true], ['a-p6', 6, '2027-03', true]]);
-    expect(fix.every((x) => x.category_id === 'home_shopping' && x.shared)).toBe(true);
-    // once repaired nothing more happens; same ids if two phones repair at once
-    const all = fix;
-    expect(repairPlans(all)).toEqual([]);
-    expect(repairPlans([old('a', 'BAUHAUS İNŞAAT (2/6)')]).map((x) => x.id)).toEqual(fix.map((x) => x.id));
+describe('repair plans', () => {
+  const row = (id: string, note: string, extra: Partial<Txn> = {}): Txn => ({ id, kind: 'expense', amount: 2190.3, date: '2026-10-17', category_id: 'home_shopping', person_id: 'p1', card_id: 'g', note, source: 'import', import_id: 'i0', created_at: 'x', pay_month: '2026-11', shared: true, ...extra });
+  const apply = (txns: Txn[]) => { const r = repairPlans(txns); const m = new Map(txns.map((x) => [x.id, x])); for (const x of r.upsert) m.set(x.id, x); for (const id of r.remove) m.delete(id); return [...m.values()]; };
+  it('legacy row without plan: plans the remaining months with its category and Ev flag', () => {
+    const all = apply([row('a', 'BAUHAUS İNŞAAT (2/6)')]);
+    const p = all.filter((x) => x.projected).sort((a, b) => a.inst_no! - b.inst_no!);
+    expect(p.map((x) => [x.inst_no, x.pay_month])).toEqual([[3, '2026-12'], [4, '2027-01'], [5, '2027-02'], [6, '2027-03']]);
+    expect(p.every((x) => x.category_id === 'home_shopping' && x.shared)).toBe(true);
+    expect(repairPlans(all)).toEqual({ upsert: [], remove: [] }); // nothing more to do
+    expect(repairPlans([row('a', 'BAUHAUS İNŞAAT (2/6)')]).upsert.map((x) => x.id)).toEqual(repairPlans([row('a', 'BAUHAUS İNŞAAT (2/6)')]).upsert.map((x) => x.id)); // same ids on both phones
   });
-  it('does not plan months that already exist and ignores last installments and plain rows', () => {
-    const later = old('b', 'BAUHAUS İNŞAAT (3/6)', { plan_key: 'g|2026-10-17|6|2190|bauhaus insaat', inst_no: 3, pay_month: '2026-12' });
-    const fix = repairPlans([old('a', 'BAUHAUS İNŞAAT (2/6)'), later, old('c', 'MIGROS (6/6)'), old('d', 'MARKET')]);
-    expect(fix.map((x) => x.id)).toEqual(['a', 'a-p4', 'a-p5', 'a-p6', 'c']);
+  it('the real-life case: 2nd month lost, later months in the old category → restored and aligned', () => {
+    const key = 'g|2026-10-17|6|2190|bauhaus insaat';
+    const txns = [
+      row('a', 'BAUHAUS İNŞAAT MALZEMELER (1/6)', { plan_key: key, inst_no: 1 }),
+      ...[3, 4, 5, 6].map((k) => row('p' + k, `BAUHAUS İNŞAAT MALZEMELER (${k}/6)`, { plan_key: key, inst_no: k, projected: true, source: 'projected', category_id: 'housing', shared: false, pay_month: ['2027-01', '2027-02', '2027-03', '2027-04'][k - 3] })),
+    ];
+    const all = apply(txns);
+    const p = all.filter((x) => x.projected).sort((a, b) => a.inst_no! - b.inst_no!);
+    expect(p.map((x) => [x.inst_no, x.pay_month, x.category_id, x.shared])).toEqual([
+      [2, '2026-12', 'home_shopping', true], [3, '2027-01', 'home_shopping', true], [4, '2027-02', 'home_shopping', true], [5, '2027-03', 'home_shopping', true], [6, '2027-04', 'home_shopping', true]]);
+  });
+  it('a planned row moved into the wrong month goes back; a planned copy of a real row is removed', () => {
+    const key = 'g|2026-10-17|6|2190|bauhaus insaat';
+    const txns = [
+      row('a', 'B (2/6)', { plan_key: key, inst_no: 2, pay_month: '2026-12' }),
+      row('x', 'B (2/6)', { plan_key: key, inst_no: 2, projected: true, source: 'projected', pay_month: '2026-12' }),
+      row('y', 'B (3/6)', { plan_key: key, inst_no: 3, projected: true, source: 'projected', pay_month: '2026-11' }),
+    ];
+    const r = repairPlans(txns);
+    expect(r.remove).toEqual(['x']);
+    expect(r.upsert.find((x) => x.id === 'y')!.pay_month).toBe('2027-01');
+  });
+  it('monthly series: fills a missing month, leaves a complete series alone', () => {
+    const s = (k: number, extra: Partial<Txn> = {}): Txn => ({ ...row('L' + k, 'Ev kredisi', { card_id: null, pay_month: null, category_id: 'loan', amount: 93000, source: k === 1 ? 'manual' : 'projected', projected: k > 1, date: `2026-${String(10 + k).padStart(2, '0')}-05`, plan_key: 'rec|L1|3', inst_no: k }), ...extra });
+    expect(repairPlans([s(1), s(2)])).toEqual({ upsert: [], remove: [] });
+    const r = repairPlans([s(1), s(3, { date: '2027-01-05' })]);
+    expect(r.upsert.map((x) => [x.inst_no, x.date, x.projected])).toEqual([[2, '2026-12-05', true]]);
   });
 });

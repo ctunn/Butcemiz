@@ -4,12 +4,12 @@ import { useT } from '../i18n';
 import { useHelpers } from '../hooks';
 import { Segmented, toast, askConfirm } from '../components/ui';
 import { parseAmount } from '../lib/money';
-import { todayISO } from '../lib/dates';
+import { shiftMonth, todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
 import { payMonthFor } from '../lib/paymonth';
 import { merchantKey } from '../lib/text';
 import { HOME_CATS } from '../lib/defaults';
-import { buildRecurring, noteInstallment, recurringInfo, syncPlan } from '../lib/installments';
+import { addMonths, buildRecurring, noteInstallment, recurringInfo, syncPlan } from '../lib/installments';
 import type { Kind, Txn } from '../types';
 
 export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?: Txn | null; initialKind?: Kind; onDone: () => void }) {
@@ -27,6 +27,11 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
   const [sharedTouched, setSharedTouched] = useState(!!initial);
   const [repeat, setRepeat] = useState(0);
   const series = initial ? recurringInfo(initial) : null;
+  // a monthly series (loan, aidat): its length can be changed later
+  const seriesRows = series ? data.txns.filter((x) => x.plan_key === initial!.plan_key) : [];
+  const seriesTotal = seriesRows.reduce((a, x) => Math.max(a, x.inst_no || 0), 0);
+  const [total, setTotal] = useState(seriesTotal);
+  const inst = initial && !series ? (initial.plan_key && initial.inst_no ? { n: initial.inst_no, of: Number(initial.plan_key.split('|')[2]) } : noteInstallment(initial.note)) : null;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const amtRef = useRef<HTMLInputElement>(null);
@@ -49,7 +54,8 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
       kind, amount: Math.round(n * 100) / 100, date, category_id: category,
       person_id: person, card_id: kind === 'expense' && card ? card : null,
       // keep the statement's payment month for imported rows; otherwise derive it from the card's days
-      pay_month: initial?.source === 'import' && initial.card_id === (card || null) && initial.pay_month
+      // (planned rows too: their date is the purchase date, the month is the installment's)
+      pay_month: initial?.pay_month && initial.card_id === (card || null) && (initial.date === date || initial.source !== 'manual')
         ? initial.pay_month
         : kind === 'expense' && card ? payMonthFor(date, data.cards.find((c) => c.id === card)) : null,
       note: note.trim(), source: initial?.source || 'manual', import_id: initial?.import_id ?? null,
@@ -61,7 +67,20 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
     try {
       // a changed category / Ev flag applies to every month of the same installment purchase or series
       const follow = initial?.plan_key ? syncPlan(rows, data.txns) : [];
-      await store.upsert('txns', [...rows, ...follow]);
+      // series made longer or shorter
+      const extend: Txn[] = [];
+      const cut: string[] = [];
+      if (series && total !== seriesTotal) {
+        const first = [...seriesRows].sort((a, b) => (a.inst_no || 0) - (b.inst_no || 0))[0];
+        const like = { ...row, projected: true, source: 'projected' as const, import_id: null };
+        for (let k = seriesTotal + 1; k <= total; k++) {
+          extend.push({ ...like, id: uid(), inst_no: k, plan_key: initial!.plan_key, note: row.note,
+            date: addMonths(first.date, k - (first.inst_no || 1)), pay_month: first.pay_month ? shiftMonth(first.pay_month, k - (first.inst_no || 1)) : null });
+        }
+        for (const x of seriesRows) if (x.projected && (x.inst_no || 0) > total && x.id !== row.id) cut.push(x.id);
+      }
+      await store.upsert('txns', [...rows, ...follow.filter((x) => !cut.includes(x.id)), ...extend]);
+      if (cut.length) await store.remove('txns', cut);
       // Re-categorising an imported item teaches the importer for next time.
       if (initial?.source === 'import' && initial.category_id !== category && initial.note) {
         const key = merchantKey(initial.note);
@@ -147,7 +166,14 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
           </select>
         </label>
       )}
-      {series && <p className="muted small">{t('repeatInfo', { n: series.n, of: series.of })}</p>}
+      {series && (
+        <label className="field"><span>{t('seriesTotal', { n: series.n })}</span>
+          <select value={total} onChange={(e) => setTotal(Number(e.target.value))} aria-label={t('seriesTotal', { n: series.n })}>
+            {Array.from({ length: Math.max(120, seriesTotal) - Math.max(1, series.n) + 1 }, (_, i) => i + Math.max(1, series.n)).map((n) => <option key={n} value={n}>{`${n} ${prefs.lang === 'tr' ? 'ay' : n === 1 ? 'month' : 'months'}`}</option>)}
+          </select>
+        </label>
+      )}
+      {inst && <p className="muted small">{t('instInfo', { n: inst.n, of: inst.of })}</p>}
 
       <label className="field"><span>{t('note')}</span><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} /></label>
 
