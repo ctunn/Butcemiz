@@ -92,6 +92,24 @@ describe('installment planning', () => {
     expect(isInstallmentDuplicate(row('2/6'), 'g', all)).toBe(true); // importing December again is a duplicate
   });
 
+  it('bank printing the posting date each month (İş Bankası): still replaced, never doubled', () => {
+    const r = (inst: string, date: string) => ({ date, description: 'NEOVA KATILIM SI(' + inst + ' TK)', amount: 2613.57, kind: 'expense' as const, category: 'other', installment: inst });
+    const oct = buildImport([r('4/9', '2026-09-05')], [], ctx('2026-10', 'i1'));
+    expect(oct).toHaveLength(6); // 4 real + 5..9 planned
+    const nov = buildImport([r('5/9', '2026-10-05')], oct, ctx('2026-11', 'i2'));
+    expect(nov).toHaveLength(1);
+    expect(nov[0].id).toBe(oct.find((x) => x.inst_no === 5)!.id);
+    const all = oct.map((x) => (x.id === nov[0].id ? nov[0] : x));
+    expect(all.filter((x) => x.pay_month === '2026-11')).toHaveLength(1);
+    expect(totals(filterTxns(all, { month: '2026-11', basis: 'pay' })).expense).toBe(2613.57);
+    // the same November statement imported again is recognised
+    expect(isInstallmentDuplicate(r('5/9', '2026-10-05'), 'g', all, '2026-11')).toBe(true);
+    // December's statement replaces December's plan
+    const dec = buildImport([r('6/9', '2026-11-05')], all, ctx('2026-12', 'i3'));
+    expect(dec).toHaveLength(1);
+    expect(dec[0].id).toBe(oct.find((x) => x.inst_no === 6)!.id);
+  });
+
   it('undoing the newer import turns its row back into a plan', () => {
     const first = buildImport([row('1/6')], [], ctx('2026-11', 'imp1'));
     const second = buildImport([row('2/6')], first, ctx('2026-12', 'imp2'));

@@ -84,6 +84,7 @@ export function cleanDescription(s: string): string {
 }
 
 // Garanti-style installment column: "2.190,30x6=13.141,80 1.Taksit" (installment x count = total, nth installment).
+const POINTS_RE = /(?:MAX[İIiı]M[İIiı]L|MAX[İIiı]PUAN|WORLDPUAN|BONUS|PUAN)\s*:\s*\d+(?:[.,]\d+)?/gi;
 const REMAINING_RE = /\d{1,3}(?:\.\d{3})*,\d{2}\s*\/\s*\d{1,2}(?!\d)/g;
 /** Yapı Kredi note under an installment row: "5.864,97 TL'lik işlemin 1 / 8 taksidi". */
 const INST_NOTE_RE = /tl['’]?\s*l[iı]k\s+islemin\s+(\d{1,2})\s*\/\s*(\d{1,2})\s+taksid/;
@@ -140,6 +141,8 @@ export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null 
       instX = xm[5] ? `${xm[5]}/${xm[2]}` : `?/${xm[2]}`;
       rest = rest.slice(0, xm.index!) + ' '.repeat(xm[0].length) + rest.slice(xm.index! + xm[0].length);
     }
+    // Reward points printed inside the row ("KAZANILAN MAXİMİL:36,00", "MAXİPUAN:0,02") are not money.
+    rest = rest.replace(POINTS_RE, (m) => ' '.repeat(m.length));
     // Yapı Kredi "Kalan Tutar / Taksit" column ("5.131,84 / 7"): what is still owed later, not this month's amount.
     rest = rest.replace(REMAINING_RE, (m) => ' '.repeat(m.length));
   }
@@ -175,7 +178,7 @@ export function splitRow(line: string, mode: 'card' | 'account'): RawRow | null 
     }
   }
   const descEnd = mode === 'account' ? pick.index : ms[0].index;
-  const desc = rest.slice(0, descEnd).trim();
+  const desc = rest.slice(0, descEnd).trim().replace(/\s+KAZANILAN\s*$/i, '');
   const plusSuffix = /\+$/.test(pick.raw.trim().replace(/\s?(TL|TRY|₺)$/i, ''));
   const inst = instX ? null : findInstallment(rest);
   const installment = instX ?? (inst ? (inst.of ? `${inst.n}/${inst.of}` : `${inst.n}.`) : null);
@@ -229,10 +232,20 @@ export function parseStatementLines(lines: Line[], bankHint?: BankId): ParseResu
   let skipped = 0;
   const used = new Set<number>();
 
+  // Some card statements (İş Bankası app export) print charges as "1,240.36-" and credits as "360.00+".
+  // When most dated rows end in "-", a trailing minus means a charge, not a refund.
+  let trailMinus = 0, trailPlus = 0;
+  if (mode === 'card') for (const l of lines) {
+    if (!LEADING_DATE.test(l.text)) continue;
+    if (/\d[.,]\d{2}\s*-\s*$/.test(l.text)) trailMinus++;
+    else if (/\d[.,]\d{2}\s*\+\s*$/.test(l.text)) trailPlus++;
+  }
+  const minusIsCharge = trailMinus >= 3 && trailMinus > trailPlus * 2;
   for (let i = 0; i < lines.length; i++) {
     const text = lines[i].text;
     if (!text.trim()) continue;
     let raw = splitRow(text, mode);
+    if (raw && minusIsCharge && raw.amount < 0) raw = { ...raw, amount: -raw.amount };
     // Wrapped row without y info: date+description on one line, amount on the next.
     if (!raw && LEADING_DATE.test(text) && !money(text).length && i + 1 < lines.length && !LEADING_DATE.test(lines[i + 1].text)) {
       raw = splitRow(text + ' ' + lines[i + 1].text, mode);
@@ -248,7 +261,7 @@ export function parseStatementLines(lines: Line[], bankHint?: BankId): ParseResu
         i++;
       }
     }
-    else if (LEADING_DATE.test(text) && money(text).length) skipped++;
+    else if (LEADING_DATE.test(text) && money(text.replace(POINTS_RE, ' ')).length) skipped++;
   }
 
   // Attach continuation lines (only for amounts-first layouts, where the description cell wraps).

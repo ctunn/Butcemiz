@@ -57,7 +57,7 @@ export function Import() {
         if (!catIds.has(sug)) sug = r.kind === 'income' ? 'other_income' : 'other';
         // installments: the same purchase shows up every month with the same date and amount, so match on the installment number
         const dup = parseInst(r.installment) && r.kind === 'expense'
-          ? isInstallmentDuplicate({ ...r, category: '' }, useCard || null, cardTxns)
+          ? isInstallmentDuplicate({ ...r, category: '' }, useCard || null, cardTxns, res.mode === 'card' && res.dueDate ? res.dueDate.slice(0, 7) : null)
           : existing.has(`${r.date}|${r.amount}|${r.kind}`);
         // transfers that clearly pay for something (e.g. "AİDAT") are kept
         const keepTransfer = r.flag === 'transfer' && r.kind === 'expense' && !!suggestCategory(r.description, data.rules);

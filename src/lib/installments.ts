@@ -26,11 +26,17 @@ export interface ImportCtx {
 }
 
 /** True when this installment of this purchase is already on file (not just planned). */
-export function isInstallmentDuplicate(r: ImportRow, cardId: string | null, existing: Txn[]): boolean {
+export function isInstallmentDuplicate(r: ImportRow, cardId: string | null, existing: Txn[], payMonth?: string | null): boolean {
   const inst = parseInst(r.installment);
   if (!inst) return false;
   const key = planKey(cardId, r.date, inst.of, r.amount, r.description);
-  return existing.some((x) => x.plan_key === key && x.inst_no === inst.n && !x.projected);
+  if (existing.some((x) => x.plan_key === key && x.inst_no === inst.n && !x.projected)) return true;
+  // Same statement again where the bank prints a posting date (it changes, the payment month does not).
+  if (!payMonth) return false;
+  const mk = merchantKey(r.description);
+  return existing.some((x) => !x.projected && x.inst_no === inst.n && x.pay_month === payMonth && !!x.plan_key
+    && (x.card_id || null) === (cardId || null) && +x.plan_key.split('|')[2] === inst.of
+    && x.plan_key.split('|').slice(4).join('|') === mk && Math.abs(x.amount - r.amount) <= 1);
 }
 
 /**
@@ -51,8 +57,12 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
       created_at: ctx.now, pay_month: ctx.payMonth, plan_key: null, inst_no: null, projected: false,
     };
     if (!inst) { out.push(base); continue; }
-    const key = planKey(ctx.cardId, r.date, inst.of, r.amount, r.description);
-    const planned = existing.find((x) => x.plan_key === key && x.inst_no === inst.n && x.projected);
+    let key = planKey(ctx.cardId, r.date, inst.of, r.amount, r.description);
+    const planned = existing.find((x) => x.plan_key === key && x.inst_no === inst.n && x.projected)
+      ?? findPlannedLoose(existing, out, ctx, inst.n, inst.of, r);
+    // Some banks (İş Bankası) print the posting date instead of the purchase date, so the same
+    // purchase can carry a different date each month: then keep the plan we already have.
+    if (planned?.plan_key) key = planned.plan_key;
     // reuse the planned row's id so it is overwritten, not duplicated
     out.push({ ...base, id: planned ? planned.id : base.id, plan_key: key, inst_no: inst.n });
     const startMonth = ctx.payMonth || r.date.slice(0, 7);
@@ -65,6 +75,18 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
     }
   }
   return out;
+}
+
+/** A planned installment of the same purchase whose stored date differs (same card, count, merchant, ±1 TL). */
+function findPlannedLoose(existing: Txn[], out: Txn[], ctx: ImportCtx, n: number, of: number, r: ImportRow): Txn | undefined {
+  const mk = merchantKey(r.description);
+  const cands = existing.filter((x) => {
+    if (!x.projected || x.inst_no !== n || !x.plan_key || (x.card_id || null) !== (ctx.cardId || null)) return false;
+    if (out.some((o) => o.id === x.id)) return false;
+    const parts = x.plan_key.split('|');
+    return +parts[2] === of && parts.slice(4).join('|') === mk && Math.abs(x.amount - r.amount) <= 1;
+  });
+  return cands.find((x) => x.pay_month === ctx.payMonth) ?? cands[0];
 }
 
 /**

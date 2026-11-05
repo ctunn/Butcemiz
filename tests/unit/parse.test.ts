@@ -220,3 +220,26 @@ describe('Yapı Kredi card: Kalan Tutar/Taksit column and installment note line'
     expect([r.cutDate, r.dueDate]).toEqual(['2026-10-27', '2026-11-06']);
   });
 });
+
+describe('İş Bankası card (app export): trailing minus = charge, plus = credit, points not money', () => {
+  const L = (text: string, y: number) => ({ text, y, page: 1 });
+  const lines = [
+    L('KREDİ KARTI HESAP ÖZETİ', 760), L('Hesap Kesim Tarihi:  04/11/2026', 750), L('Son Ödeme Tarihi:  16/11/2026', 740),
+    L('Devir Bakiyesi:  -5,000.00', 730),
+    L('İŞLEM TARİHİ  AÇIKLAMA  TUTAR', 700),
+    L('5.10.2026  MAGAZA X(5/9 TK) 9,000.00 TL  1,000.00-', 690),
+    L('9.10.2026  RESTORAN Y İSTANBUL TR KAZANILAN MAXİMİL:36,00  7,200.00-', 680),
+    L('11.10.2026  BLACK RESTORAN INDIRIM  360.00+', 670),
+    L('12.10.2026  İNDİRİM NEDENİYLE İPTAL EDİLEN MAXİMİL: 1,80 RESTORAN Y İSTANBUL TR', 660),
+    L('16.10.2026  MAXIMILES SANAL YURT DISI KAZANILAN MAXİMİL:500,00', 650),
+    L('4.11.2026  KREDİ KARTI YILLIK ÜCRETİ  3,760.00-', 640),
+  ];
+  const r = parseStatementLines(lines, 'isbank');
+  it('reads charges as expenses and the discount as a credit', () => {
+    expect(r.rows.map((x) => [x.amount, x.kind])).toEqual([[1000, 'expense'], [7200, 'expense'], [360, 'income'], [3760, 'expense']]);
+    expect(r.rows[0].installment).toBe('5/9');
+    expect(r.rows[1].description).toBe('RESTORAN Y İSTANBUL TR');
+    expect(r.skipped).toBe(0);
+    expect(r.dueDate).toBe('2026-11-16');
+  });
+});
