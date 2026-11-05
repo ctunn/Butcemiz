@@ -26,6 +26,7 @@ export function readLocal(): Data {
       cards: d.cards ?? base.cards,
       txns: d.txns ?? [],
       rules: d.rules ?? [],
+      shopping: d.shopping ?? [],
     };
   } catch {
     return emptyData();

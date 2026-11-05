@@ -54,12 +54,21 @@ export interface Rule {
   category_id: string;
 }
 
+export interface ShopItem {
+  id: string;
+  name: string;
+  done: boolean;
+  person_id: string | null; // who added it
+  created_at: string;
+}
+
 export interface Data {
   categories: Category[];
   people: Person[];
   cards: Card[];
   txns: Txn[];
   rules: Rule[];
+  shopping: ShopItem[];
 }
 
 export type TableName = keyof Data;

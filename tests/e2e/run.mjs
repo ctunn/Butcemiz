@@ -1100,6 +1100,25 @@ tc('TC55', 'Kredi', 'Series length can be changed later from the first payment',
   assert(t.length === 2, `shortened to 2: ${t.length}`);
 });
 
+tc('TC56', 'Alışveriş listesi', 'Add "süt, ekmek", tick one, clear bought; fits 393px', async ({ page }) => {
+  await tab(page, 'Liste');
+  await visible(page.getByText('Liste boş'), 'empty state');
+  await page.getByLabel('Listeye ekle').first().fill('süt, ekmek');
+  await page.getByRole('button', { name: 'Listeye ekle' }).click();
+  await visible(page.getByText('ekmek'), 'ekmek listed');
+  let s = await page.evaluate(() => JSON.parse(localStorage.getItem('budget-data-v1')).shopping);
+  assert(s.length === 2 && s.every((x) => !x.done), `2 open items: ${JSON.stringify(s)}`);
+  await page.getByText('süt').click();
+  await visible(page.getByRole('heading', { name: /Alındı/ }), 'bought section');
+  s = await page.evaluate(() => JSON.parse(localStorage.getItem('budget-data-v1')).shopping);
+  assert(s.find((x) => x.name === 'süt').done === true, 'süt marked done');
+  await noHorizontalOverflow(page, 'shopping tab');
+  await page.getByRole('button', { name: 'Temizle' }).click();
+  await page.waitForTimeout(300);
+  s = await page.evaluate(() => JSON.parse(localStorage.getItem('budget-data-v1')).shopping);
+  assert(s.length === 1 && s[0].name === 'ekmek', `bought item cleared: ${JSON.stringify(s)}`);
+}, { shot: true });
+
 tc('TC52', 'Düzen', 'Very long number typed in the amount field does not push the sheet wider than 393px', async ({ page }) => {
   const dlg = await openAdd(page);
   await dlg.getByLabel('Tutar').fill('123456789012345678,99');

@@ -53,7 +53,7 @@ export function Settings() {
       const d = JSON.parse(await f.text()) as Data;
       if (!Array.isArray(d.txns) || !Array.isArray(d.categories)) throw new Error('invalid backup');
       if (!(await askConfirm(t('restoreConfirm')))) return;
-      await store.replaceAll({ categories: d.categories, people: d.people || [], cards: d.cards || [], txns: d.txns, rules: d.rules || [] });
+      await store.replaceAll({ categories: d.categories, people: d.people || [], cards: d.cards || [], txns: d.txns, rules: d.rules || [], shopping: d.shopping || [] });
       toast(t('saved'));
     } catch (e: any) { toast(t('error') + ': ' + (e?.message || e), 'err'); }
     if (restoreRef.current) restoreRef.current.value = '';

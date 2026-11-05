@@ -6,7 +6,9 @@ import { writeLocal } from './local';
 export interface CloudConfig { url: string; anonKey: string }
 
 const CFG_KEY = 'budget-cloud-config';
-const TABLES: TableName[] = ['categories', 'people', 'cards', 'txns', 'rules'];
+const TABLES: TableName[] = ['categories', 'people', 'cards', 'txns', 'rules', 'shopping'];
+// added later: a database that has not run the newer schema.sql may not have it yet
+const OPTIONAL: TableName[] = ['shopping'];
 
 export function getCloudConfig(): CloudConfig | null {
   const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -42,13 +44,18 @@ export async function myHousehold(): Promise<{ id: string; name: string; invite_
 
 export class CloudBackend implements Backend {
   kind = 'cloud' as const;
+  private missing = new Set<TableName>();
   constructor(private s: SupabaseClient, private householdId: string) {}
 
   async load(): Promise<Data> {
     const results = await Promise.all(TABLES.map((t) => this.s.from(t).select('*').eq('household_id', this.householdId)));
     const d: any = {};
     TABLES.forEach((t, i) => {
-      if (results[i].error) throw results[i].error;
+      if (results[i].error) {
+        if (OPTIONAL.includes(t)) { this.missing.add(t); d[t] = []; return; }
+        throw results[i].error;
+      }
+      this.missing.delete(t);
       d[t] = (results[i].data || []).map(({ household_id, ...rest }: any) => rest);
     });
     d.txns = d.txns.map((t: any) => ({ ...t, amount: Number(t.amount) }));
@@ -58,6 +65,10 @@ export class CloudBackend implements Backend {
 
   async upsert<T extends TableName>(table: T, rows: Data[T]) {
     if (!rows.length) return;
+    if (this.missing.has(table)) {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('budget-schema-old'));
+      throw new Error('schemaOld');
+    }
     const payload = (rows as any[]).map((r) => ({ ...r, household_id: this.householdId }));
     let { error } = await this.s.from(table).upsert(payload, { onConflict: 'household_id,id' });
     // Database not yet updated with the v1.1 columns: save without them rather than failing.
@@ -80,7 +91,7 @@ export class CloudBackend implements Backend {
   subscribe(onChange: () => void) {
     let timer: any;
     const ch = this.s.channel('household-' + this.householdId);
-    for (const t of TABLES) {
+    for (const t of TABLES.filter((x) => !this.missing.has(x))) {
       ch.on('postgres_changes' as any, { event: '*', schema: 'public', table: t, filter: `household_id=eq.${this.householdId}` }, () => {
         clearTimeout(timer);
         timer = setTimeout(onChange, 400);

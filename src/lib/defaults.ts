@@ -65,5 +65,6 @@ export function emptyData(): Data {
     ],
     txns: [],
     rules: [],
+    shopping: [],
   };
 }

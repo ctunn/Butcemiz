@@ -74,7 +74,7 @@ export const store = {
 
   /** Replace everything (used by backup restore and moving local data to the cloud). */
   async replaceAll(data: Data) {
-    const tables: TableName[] = ['categories', 'people', 'cards', 'rules', 'txns'];
+    const tables: TableName[] = ['categories', 'people', 'cards', 'rules', 'txns', 'shopping'];
     for (const t of [...tables].reverse()) {
       const ids = (state.data[t] as { id: string }[]).map((x) => x.id);
       if (ids.length) await backend.remove(t, ids);

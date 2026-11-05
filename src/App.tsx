@@ -5,13 +5,14 @@ import { Home } from './screens/Home';
 import { Transactions } from './screens/Transactions';
 import { Import } from './screens/Import';
 import { Settings } from './screens/Settings';
+import { Shopping } from './screens/Shopping';
 import { TxnForm } from './screens/TxnForm';
 import { resumeSync } from './screens/Sync';
 import { Icon, Sheet, ToastHost, ConfirmHost, type IconName } from './components/ui';
 import { todayISO } from './lib/dates';
 import type { Txn } from './types';
 
-type Tab = 'home' | 'txns' | 'import' | 'settings';
+type Tab = 'home' | 'txns' | 'shop' | 'import' | 'settings';
 
 export function App() {
   const t = useT();
@@ -29,6 +30,7 @@ export function App() {
     { id: 'home', icon: 'home', label: t('home') },
     { id: 'txns', icon: 'list', label: t('txns') },
     { id: 'add', icon: 'plus', label: t('add') },
+    { id: 'shop', icon: 'cart', label: t('shop') },
     { id: 'import', icon: 'import', label: t('import') },
     { id: 'settings', icon: 'settings', label: t('settings') },
   ];
@@ -36,7 +38,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>{t(tab === 'home' ? 'appName' : tab === 'txns' ? 'txns' : tab === 'import' ? 'import' : 'settings')}</h1>
+        <h1>{t(tab === 'home' ? 'appName' : tab === 'txns' ? 'txns' : tab === 'import' ? 'import' : tab === 'shop' ? 'shopTitle' : 'settings')}</h1>
         {syncing && <span className="spinner" aria-label="syncing" />}
       </header>
       {error && (
@@ -48,6 +50,7 @@ export function App() {
       <main>
         {tab === 'home' && <Home month={month} setMonth={setMonth} onEdit={setEditing} />}
         {tab === 'txns' && <Transactions month={month} setMonth={setMonth} onEdit={setEditing} />}
+        {tab === 'shop' && <Shopping />}
         {tab === 'import' && <Import />}
         {tab === 'settings' && <Settings />}
       </main>

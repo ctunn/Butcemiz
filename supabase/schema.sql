@@ -73,6 +73,17 @@ create table if not exists rules (
   primary key (household_id, id)
 );
 
+-- v1.4: shared shopping list.
+create table if not exists shopping (
+  household_id uuid not null references households(id) on delete cascade,
+  id text not null,
+  name text not null,
+  done boolean not null default false,
+  person_id text,
+  created_at timestamptz not null default now(),
+  primary key (household_id, id)
+);
+
 -- Row level security: you can only see rows of the household you belong to.
 create or replace function my_household_ids() returns setof uuid
 language sql stable security definer set search_path = public as $$
@@ -86,6 +97,7 @@ alter table people enable row level security;
 alter table cards enable row level security;
 alter table txns enable row level security;
 alter table rules enable row level security;
+alter table shopping enable row level security;
 
 drop policy if exists hh_select on households;
 create policy hh_select on households for select using (id in (select my_household_ids()));
@@ -95,7 +107,7 @@ create policy mem_select on members for select using (household_id in (select my
 do $$
 declare t text;
 begin
-  foreach t in array array['categories','people','cards','txns','rules'] loop
+  foreach t in array array['categories','people','cards','txns','rules','shopping'] loop
     execute format('drop policy if exists %I_all on %I', t, t);
     execute format('create policy %I_all on %I for all using (household_id in (select my_household_ids())) with check (household_id in (select my_household_ids()))', t, t);
     execute format('alter table %I replica identity full', t);
@@ -130,7 +142,7 @@ end $$;
 -- Table access for signed-in users (rows are still filtered by the policies above).
 grant usage on schema public to authenticated;
 grant select on households, members to authenticated;
-grant select, insert, update, delete on categories, people, cards, txns, rules to authenticated;
+grant select, insert, update, delete on categories, people, cards, txns, rules, shopping to authenticated;
 
 grant execute on function create_household(text) to authenticated;
 grant execute on function join_household(text) to authenticated;
@@ -139,7 +151,7 @@ grant execute on function join_household(text) to authenticated;
 do $$
 declare t text;
 begin
-  foreach t in array array['categories','people','cards','txns','rules'] loop
+  foreach t in array array['categories','people','cards','txns','rules','shopping'] loop
     begin
       execute format('alter publication supabase_realtime add table %I', t);
     exception when duplicate_object then null;
