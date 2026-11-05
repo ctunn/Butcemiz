@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import type { Data, TableName, Lang } from '../types';
 import type { Backend } from './backend';
 import { LocalBackend, readLocal } from './local';
+import { missingDefaultCats } from '../lib/defaults';
 
 export interface Prefs { lang: Lang; currency: string; defaultPersonId: string | null; monthBasis: 'pay' | 'purchase' }
 const PREFS_KEY = 'budget-prefs';
@@ -36,6 +37,8 @@ export const store = {
     try {
       const data = await b.load();
       set({ data, syncing: false });
+      const add = missingDefaultCats(data.categories);
+      if (add.length) await store.upsert('categories', add).catch(() => {});
       unsub = b.subscribe ? b.subscribe(() => store.reload()) : null;
     } catch (e: any) {
       set({ syncing: false, error: e?.message || String(e) });

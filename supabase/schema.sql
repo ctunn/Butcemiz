@@ -64,6 +64,8 @@ alter table txns add column if not exists plan_key text;
 alter table txns add column if not exists inst_no int;
 alter table txns add column if not exists projected boolean not null default false;
 alter table txns drop constraint if exists txns_source_check;
+-- v1.3: household (ev) shared expenses.
+alter table txns add column if not exists shared boolean not null default false;
 
 create table if not exists rules (
   household_id uuid not null references households(id) on delete cascade,

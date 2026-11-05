@@ -9,7 +9,7 @@ export function TxnRow({ t, onClick }: { t: Txn; onClick?: () => void }) {
   const p = h.person(t.person_id);
   // Card purchases paid in a later month show that month, e.g. "Kasım ödemesi".
   const paid = t.pay_month && t.pay_month !== t.date.slice(0, 7) ? '→ ' + monthLabel(t.pay_month, h.lang).split(' ')[0] : null;
-  const sub = [p?.name, card?.name, paid].filter(Boolean).join(' · ');
+  const sub = [t.shared ? '🏠' : null, p?.name, card?.name, paid].filter(Boolean).join(' · ');
   return (
     <button className="txn" onClick={onClick}>
       <span className="txn-icon" style={{ background: (c?.color || '#999') + '26' }}>{c?.icon || '❔'}</span>

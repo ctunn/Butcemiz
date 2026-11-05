@@ -8,6 +8,8 @@ import { todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
 import { payMonthFor } from '../lib/paymonth';
 import { merchantKey } from '../lib/text';
+import { HOME_CATS } from '../lib/defaults';
+import { buildRecurring, recurringInfo } from '../lib/installments';
 import type { Kind, Txn } from '../types';
 
 export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?: Txn | null; initialKind?: Kind; onDone: () => void }) {
@@ -21,6 +23,10 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
   const [person, setPerson] = useState<string | null>(initial ? initial.person_id : prefs.defaultPersonId && data.people.some((p) => p.id === prefs.defaultPersonId) ? prefs.defaultPersonId : data.people[0]?.id ?? null);
   const [card, setCard] = useState<string>(initial?.card_id || '');
   const [note, setNote] = useState(initial?.note || '');
+  const [shared, setShared] = useState<boolean>(initial ? !!initial.shared : false);
+  const [sharedTouched, setSharedTouched] = useState(!!initial);
+  const [repeat, setRepeat] = useState(0);
+  const series = initial ? recurringInfo(initial) : null;
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const amtRef = useRef<HTMLInputElement>(null);
@@ -30,12 +36,15 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
 
   const cats = data.categories.filter((c) => c.kind === kind && (!c.archived || c.id === cat));
   useEffect(() => { if (cat && !cats.some((c) => c.id === cat)) setCat(''); }, [kind]); // eslint-disable-line
+  // home categories are shared household expenses unless the user says otherwise
+  useEffect(() => { if (!sharedTouched) setShared(HOME_CATS.has(cat)); }, [cat]); // eslint-disable-line
 
   const save = async () => {
     const n = parseAmount(amount);
     if (n === null || n <= 0) { setErr(t('invalidAmount')); amtRef.current?.focus(); return; }
     const category = cat || (kind === 'expense' ? 'other' : 'other_income');
     const row: Txn = {
+      ...(initial || {}),
       id: initial?.id || uid(),
       kind, amount: Math.round(n * 100) / 100, date, category_id: category,
       person_id: person, card_id: kind === 'expense' && card ? card : null,
@@ -45,10 +54,12 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
         : kind === 'expense' && card ? payMonthFor(date, data.cards.find((c) => c.id === card)) : null,
       note: note.trim(), source: initial?.source || 'manual', import_id: initial?.import_id ?? null,
       created_at: initial?.created_at || new Date().toISOString(),
+      shared: kind === 'expense' && shared,
     };
+    const rows = repeat > 0 && !initial?.plan_key ? buildRecurring(row, repeat, uid) : [row];
     setBusy(true);
     try {
-      await store.upsert('txns', [row]);
+      await store.upsert('txns', rows);
       // Re-categorising an imported item teaches the importer for next time.
       if (initial?.source === 'import' && initial.category_id !== category && initial.note) {
         const key = merchantKey(initial.note);
@@ -58,7 +69,7 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
         }
       }
       if (person) store.setPrefs({ defaultPersonId: person });
-      toast(t('saved'));
+      toast(t('saved') + (rows.length > 1 ? ' · ' + t('plannedRepeat', { n: rows.length - 1 }) : ''));
       onDone();
     } catch (e: any) {
       toast(t('error') + ': ' + (e?.message || e), 'err');
@@ -118,6 +129,23 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
           </div>
         </fieldset>
       )}
+
+      {kind === 'expense' && (
+        <label className="switch-row">
+          <input type="checkbox" checked={shared} onChange={(e) => { setShared(e.target.checked); setSharedTouched(true); }} />
+          <span>🏠 {t('sharedHome')}<small className="muted"> · {t('sharedHomeHint')}</small></span>
+        </label>
+      )}
+
+      {kind === 'expense' && !initial?.plan_key && (
+        <label className="field"><span>{t('repeatMonthly')}</span>
+          <select value={repeat} onChange={(e) => setRepeat(Number(e.target.value))} aria-label={t('repeatCount')}>
+            <option value={0}>{t('repeatNone')}</option>
+            {Array.from({ length: 60 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{`+${n} ${prefs.lang === 'tr' ? 'ay' : n === 1 ? 'month' : 'months'}`}</option>)}
+          </select>
+        </label>
+      )}
+      {series && <p className="muted small">{t('repeatInfo', { n: series.n, of: series.of })}</p>}
 
       <label className="field"><span>{t('note')}</span><input value={note} onChange={(e) => setNote(e.target.value)} maxLength={120} /></label>
 

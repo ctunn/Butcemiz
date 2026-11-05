@@ -34,7 +34,7 @@ export function isInstallmentDuplicate(r: ImportRow, cardId: string | null, exis
   // Same statement again where the bank prints a posting date (it changes, the payment month does not).
   if (!payMonth) return false;
   const mk = merchantKey(r.description);
-  return existing.some((x) => !x.projected && x.inst_no === inst.n && x.pay_month === payMonth && !!x.plan_key
+  return existing.some((x) => !x.projected && x.inst_no === inst.n && x.pay_month === payMonth && !!x.plan_key && !isRecurringKey(x.plan_key)
     && (x.card_id || null) === (cardId || null) && +x.plan_key.split('|')[2] === inst.of
     && x.plan_key.split('|').slice(4).join('|') === mk && Math.abs(x.amount - r.amount) <= 1);
 }
@@ -56,7 +56,12 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
       person_id: ctx.personId, card_id: ctx.cardId, note, source: 'import', import_id: ctx.importId,
       created_at: ctx.now, pay_month: ctx.payMonth, plan_key: null, inst_no: null, projected: false,
     };
-    if (!inst) { out.push(base); continue; }
+    if (!inst) {
+      // A monthly payment planned by hand (loan, rent): the real statement row replaces this month's plan.
+      const rec = r.kind === 'expense' ? findRecurring(existing, out, ctx, r) : undefined;
+      out.push(rec ? { ...base, id: rec.id, plan_key: rec.plan_key, inst_no: rec.inst_no, shared: rec.shared } : base);
+      continue;
+    }
     let key = planKey(ctx.cardId, r.date, inst.of, r.amount, r.description);
     const planned = existing.find((x) => x.plan_key === key && x.inst_no === inst.n && x.projected)
       ?? findPlannedLoose(existing, out, ctx, inst.n, inst.of, r);
@@ -77,11 +82,51 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
   return out;
 }
 
+export const isRecurringKey = (k: string | null | undefined) => !!k && k.startsWith('rec|');
+
+/** "rec|<first id>|<total>": n of total for a monthly payment series. */
+export function recurringInfo(t: Txn): { n: number; of: number } | null {
+  if (!isRecurringKey(t.plan_key) || !t.inst_no) return null;
+  const of = Number(t.plan_key!.split('|')[2]);
+  return of ? { n: t.inst_no, of } : null;
+}
+
+function addMonths(date: string, k: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const last = new Date(y, m - 1 + k + 1, 0).getDate();
+  const x = new Date(y, m - 1 + k, Math.min(d, last));
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+
+/** Repeat a payment for `more` months after this one as planned rows (e.g. a loan). */
+export function buildRecurring(row: Txn, more: number, uid: () => string): Txn[] {
+  const key = `rec|${row.id}|${more + 1}`;
+  const first: Txn = { ...row, plan_key: key, inst_no: 1 };
+  const out = [first];
+  for (let k = 1; k <= more; k++) {
+    out.push({
+      ...row, id: uid(), plan_key: key, inst_no: k + 1, projected: true, source: 'projected', import_id: null,
+      date: addMonths(row.date, k), pay_month: row.pay_month ? shiftMonth(row.pay_month, k) : null,
+    });
+  }
+  return out;
+}
+
+/** This month's planned payment of a series that an imported row pays (same month, same account, ±1%). */
+function findRecurring(existing: Txn[], out: Txn[], ctx: ImportCtx, r: ImportRow): Txn | undefined {
+  const month = ctx.payMonth || r.date.slice(0, 7);
+  return existing.find((x) => x.projected && x.kind === 'expense' && isRecurringKey(x.plan_key)
+    && (x.pay_month || x.date.slice(0, 7)) === month
+    && ((x.card_id || null) === (ctx.cardId || null) || (!x.card_id && !ctx.payMonth))
+    && Math.abs(x.amount - r.amount) <= Math.max(1, x.amount * 0.01)
+    && !out.some((o) => o.id === x.id));
+}
+
 /** A planned installment of the same purchase whose stored date differs (same card, count, merchant, ±1 TL). */
 function findPlannedLoose(existing: Txn[], out: Txn[], ctx: ImportCtx, n: number, of: number, r: ImportRow): Txn | undefined {
   const mk = merchantKey(r.description);
   const cands = existing.filter((x) => {
-    if (!x.projected || x.inst_no !== n || !x.plan_key || (x.card_id || null) !== (ctx.cardId || null)) return false;
+    if (!x.projected || x.inst_no !== n || !x.plan_key || isRecurringKey(x.plan_key) || (x.card_id || null) !== (ctx.cardId || null)) return false;
     if (out.some((o) => o.id === x.id)) return false;
     const parts = x.plan_key.split('|');
     return +parts[2] === of && parts.slice(4).join('|') === mk && Math.abs(x.amount - r.amount) <= 1;

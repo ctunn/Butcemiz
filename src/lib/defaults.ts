@@ -11,6 +11,8 @@ export const DEFAULT_CATEGORIES: Category[] = [
   c('transport', 'Transport & Fuel', 'Ulaşım & Yakıt', '⛽', '#4E79A7'),
   c('bills', 'Bills & Utilities', 'Faturalar', '💡', '#EDC948'),
   c('housing', 'Rent & Home', 'Kira & Ev', '🏠', '#9C755F'),
+  c('home_bills', 'Home Bills', 'Ev Faturaları', '🧾', '#F1CE63'),
+  c('home_shopping', 'Home Shopping', 'Ev Alışverişi', '🧺', '#499894'),
   c('shopping', 'Shopping', 'Alışveriş', '🛍️', '#B07AA1'),
   c('health', 'Health', 'Sağlık', '💊', '#E15759'),
   c('entertainment', 'Entertainment', 'Eğlence', '🎬', '#FF9DA7'),
@@ -29,6 +31,19 @@ export const DEFAULT_CATEGORIES: Category[] = [
   c('rental_income', 'Rental Income', 'Kira Geliri', '🏘️', '#4E79A7', 'income'),
   c('other_income', 'Other Income', 'Diğer Gelir', '💰', '#BAB0AC', 'income'),
 ];
+
+/** Categories added after launch: households created earlier get them on next load. */
+const ADDED_CATS = ['home_bills', 'home_shopping'];
+export function missingDefaultCats(have: Category[]): Category[] {
+  if (!have.length) return [];
+  const ids = new Set(have.map((x) => x.id));
+  return DEFAULT_CATEGORIES.filter((x) => ADDED_CATS.includes(x.id) && !ids.has(x.id)).map((x) => ({ ...x }));
+}
+
+/** Categories that are household (ev) expenses by default. */
+export const HOME_CATS = new Set(['housing', 'home_bills', 'home_shopping']);
+/** Filter value for the shared household group next to the people chips. */
+export const HOME_GROUP = '__home';
 
 export const DEFAULT_PEOPLE: Person[] = [
   { id: 'p1', name: 'Ben', color: '#4E79A7' },

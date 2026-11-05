@@ -11,7 +11,8 @@ import { uid } from '../lib/id';
 import type { BankId, Kind, Txn } from '../types';
 import type { RowFlag } from '../import/parse';
 import { BANK_NAMES } from '../lib/banks';
-import { buildImport, isInstallmentDuplicate, parseInst, planUndo } from '../lib/installments';
+import { buildImport, isInstallmentDuplicate, isRecurringKey, parseInst, planUndo } from '../lib/installments';
+import { HOME_CATS } from '../lib/defaults';
 
 interface Row { key: string; date: string; description: string; amount: number; kind: Kind; category: string; include: boolean; flag: RowFlag; dup: boolean; installment?: string | null; suggested: string }
 
@@ -48,7 +49,7 @@ export function Import() {
       }
       const cardTxns = data.txns.filter((x) => x.card_id === useCard);
       // planned installments are not real yet, so they never count as "already imported"
-      const existing = new Set(cardTxns.filter((x) => !x.projected && !x.plan_key).map((x) => `${x.date}|${x.amount}|${x.kind}`));
+      const existing = new Set(cardTxns.filter((x) => !x.projected && (!x.plan_key || isRecurringKey(x.plan_key))).map((x) => `${x.date}|${x.amount}|${x.kind}`));
       const catIds = new Set(data.categories.map((c) => c.id));
       const out: Row[] = res.rows.map((r, i) => {
         let sug: string;
@@ -89,9 +90,11 @@ export function Import() {
     // Card statements are paid in the month of their due date: that is the budget month.
     const isCard = (card?.kind || 'card') === 'card';
     const payMonth = isCard && mode === 'card' && stmtDates.due ? stmtDates.due.slice(0, 7) : null;
-    const txns: Txn[] = buildImport(selected, data.txns.filter((x) => x.card_id === (cardId || null)), {
+    // cash/bank plans (loan) can be paid from an account statement, so they are candidates too
+    const pool = data.txns.filter((x) => x.card_id === (cardId || null) || (!x.card_id && isRecurringKey(x.plan_key)));
+    const txns: Txn[] = buildImport(selected, pool, {
       cardId: cardId || null, personId: card?.person_id ?? null, payMonth: isCard ? payMonth : null, importId, now, uid,
-    });
+    }).map((x) => (HOME_CATS.has(x.category_id) && !x.shared ? { ...x, shared: true } : x));
     // learn categories the user corrected
     const learned = new Map<string, string>();
     for (const r of selected) if (r.kind === 'expense' && r.category !== r.suggested) { const k = merchantKey(r.description); if (k) learned.set(k, r.category); }

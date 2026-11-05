@@ -1035,6 +1035,40 @@ tc('TC51', 'Ekstreler', 'Password-protected PDF asks for the password, rejects a
   await expectText(page.getByRole('heading', { name: /işlem bulundu/ }), `${CARD_ROWS.length} işlem bulundu`, 'rows after unlock');
 });
 
+tc('TC53', 'Ev ortak', 'Ev Faturaları turns on the shared switch; Ev chip shows only shared expenses', async ({ page }) => {
+  let dlg = await openAdd(page);
+  await dlg.getByLabel('Tutar').fill('900');
+  await dlg.getByRole('button', { name: 'Ev Faturaları' }).click();
+  await dlg.getByLabel(/Ev ortak gideri/).waitFor();
+  for (let i = 0; i < 20 && !(await dlg.getByLabel(/Ev ortak gideri/).isChecked()); i++) await page.waitForTimeout(50);
+  assert(await dlg.getByLabel(/Ev ortak gideri/).isChecked(), 'shared switch on for Ev Faturaları');
+  await dlg.getByRole('button', { name: 'Kaydet' }).click();
+  await hidden(dlg, 'sheet closes');
+  dlg = await openAdd(page);
+  await dlg.getByLabel('Tutar').fill('300');
+  await dlg.getByRole('button', { name: 'Yeme & İçme' }).click();
+  assert(!(await dlg.getByLabel(/Ev ortak gideri/).isChecked()), 'shared switch off for dining');
+  await dlg.getByRole('button', { name: 'Kaydet' }).click();
+  await hidden(dlg, 'sheet closes');
+  await expectText(stat(page, 'Gider'), '₺1.200', 'everyone total');
+  await page.getByRole('button', { name: /Ev$/ }).first().click();
+  await expectText(stat(page, 'Gider'), '₺900', 'Ev total only shared');
+  const t = await txns(page);
+  assert(t.find((x) => x.amount === 900).shared === true && !t.find((x) => x.amount === 300).shared, 'shared flag stored');
+}, { shot: true });
+
+tc('TC54', 'Kredi', 'Repeat monthly plans the next months as Planlanan', async ({ page }) => {
+  const dlg = await openAdd(page);
+  await dlg.getByLabel('Tutar').fill('12500');
+  await dlg.getByRole('button', { name: 'Kredi Ödemeleri' }).click();
+  await dlg.getByLabel('Kaç ay daha').selectOption('3');
+  await dlg.getByRole('button', { name: 'Kaydet' }).click();
+  await hidden(dlg, 'sheet closes');
+  await toastHas(page, '3 gelecek ödeme planlandı');
+  const t = await txns(page);
+  assert(t.length === 4 && t.filter((x) => x.projected).length === 3 && new Set(t.map((x) => x.date.slice(0, 7))).size === 4, `4 rows in 4 months: ${JSON.stringify(t.map((x) => [x.date, x.projected]))}`);
+});
+
 tc('TC52', 'Düzen', 'Very long number typed in the amount field does not push the sheet wider than 393px', async ({ page }) => {
   const dlg = await openAdd(page);
   await dlg.getByLabel('Tutar').fill('123456789012345678,99');

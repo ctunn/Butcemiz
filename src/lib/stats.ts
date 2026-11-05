@@ -1,3 +1,4 @@
+import { HOME_GROUP } from './defaults';
 import type { Category, Kind, Txn } from '../types';
 
 export interface Slice { id: string; label: string; value: number; color: string; icon: string; pct: number }
@@ -13,7 +14,7 @@ export function txnMonth(t: Txn, basis: MonthBasis = 'pay'): string {
 export function filterTxns(txns: Txn[], f: Filter): Txn[] {
   return txns.filter((t) =>
     (!f.month || txnMonth(t, f.basis) === f.month) &&
-    (!f.personId || t.person_id === f.personId) &&
+    (!f.personId || (f.personId === HOME_GROUP ? !!t.shared : t.person_id === f.personId)) &&
     (!f.cardId || t.card_id === f.cardId) &&
     (!f.kind || t.kind === f.kind));
 }

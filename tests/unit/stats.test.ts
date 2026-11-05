@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { byCategory, filterTxns, monthlyTrend, totals, txnMonth } from '../../src/lib/stats';
 import { payMonthFor } from '../../src/lib/paymonth';
-import { DEFAULT_CATEGORIES } from '../../src/lib/defaults';
+import { DEFAULT_CATEGORIES, HOME_GROUP, missingDefaultCats } from '../../src/lib/defaults';
 import { demoData } from '../../src/lib/demo';
 import type { Txn } from '../../src/types';
 
@@ -62,7 +62,7 @@ describe('payment month', () => {
 });
 
 
-import { buildImport, planUndo, isInstallmentDuplicate } from '../../src/lib/installments';
+import { buildImport, planUndo, isInstallmentDuplicate, buildRecurring, recurringInfo } from '../../src/lib/installments';
 
 describe('installment planning', () => {
   let n = 0;
@@ -124,5 +124,48 @@ describe('installment planning', () => {
   it('ignores rows without a full n/N installment', () => {
     expect(buildImport([row('?/6')], [], ctx('2026-11', 'i'))).toHaveLength(1);
     expect(buildImport([{ ...row('1/6'), kind: 'income' }], [], ctx('2026-11', 'i'))).toHaveLength(1);
+  });
+});
+
+describe('monthly repeat (loan) and the Home group', () => {
+  let n = 0;
+  const uid = () => 'r' + n++;
+  const loan = (): Txn => ({ id: 'loan1', kind: 'expense', amount: 12500, date: '2026-10-15', category_id: 'loan', person_id: 'p1', card_id: null, note: 'Konut kredisi', source: 'manual', created_at: '2026-10-15T00:00:00Z', pay_month: null });
+
+  it('plans the following months and keeps the day of month', () => {
+    const rows = buildRecurring(loan(), 3, uid);
+    expect(rows.map((x) => [x.date, x.inst_no, !!x.projected])).toEqual([
+      ['2026-10-15', 1, false], ['2026-11-15', 2, true], ['2026-12-15', 3, true], ['2027-01-15', 4, true]]);
+    expect(recurringInfo(rows[2])).toEqual({ n: 3, of: 4 });
+    expect(totals(filterTxns(rows, { month: '2026-12', basis: 'pay' })).expense).toBe(12500);
+  });
+
+  it('account statement payment replaces that month\'s plan, not another month', () => {
+    const plan = buildRecurring(loan(), 3, uid);
+    const ctx = { cardId: 'a-isbank-p1', personId: 'p1', payMonth: null, importId: 'acc1', now: 'x', uid };
+    const out = buildImport([{ date: '2026-11-15', description: 'KREDI TAKSIT ODEMESI', amount: 12500, kind: 'expense', category: 'loan' }], plan, ctx);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: plan[1].id, projected: false, inst_no: 2, card_id: 'a-isbank-p1' });
+    const all = plan.map((x) => (x.id === out[0].id ? out[0] : x));
+    expect(filterTxns(all, { month: '2026-11', basis: 'pay' })).toHaveLength(1);
+    // a different amount in December does not touch the plan
+    const other = buildImport([{ date: '2026-12-03', description: 'MARKET', amount: 300, kind: 'expense', category: 'groceries' }], all, ctx);
+    expect(other[0].id).not.toBe(plan[2].id);
+  });
+
+  it('Home group shows shared rows of both people', () => {
+    const rows: Txn[] = [
+      { ...loan(), id: 'a', shared: true, person_id: 'p1', category_id: 'home_bills', amount: 100 },
+      { ...loan(), id: 'b', shared: true, person_id: 'p2', category_id: 'home_shopping', amount: 50 },
+      { ...loan(), id: 'c', shared: false, person_id: 'p1', category_id: 'dining', amount: 70 },
+    ];
+    const home = filterTxns(rows, { month: '2026-10', personId: HOME_GROUP });
+    expect(home.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(filterTxns(rows, { month: '2026-10', personId: 'p1' }).map((x) => x.id)).toEqual(['a', 'c']);
+  });
+
+  it('existing households get the new home categories', () => {
+    expect(missingDefaultCats([{ id: 'groceries' } as any]).map((x) => x.id)).toEqual(['home_bills', 'home_shopping']);
+    expect(missingDefaultCats([])).toEqual([]);
   });
 });

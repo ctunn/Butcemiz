@@ -232,3 +232,8 @@ details[open] { display: flex; flex-direction: column; gap: 10px; }
 .basis p { margin: 0 4px; }
 .badge-planned { display: inline-block; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-radius: 6px; padding: 1px 6px; margin-right: 6px; vertical-align: 1px; }
 .planned-note { margin: -4px 4px 0; }
+
+/* Shared household (ev) expense switch */
+.switch-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 12px; font-size: 15px; }
+.switch-row input { width: 20px; height: 20px; accent-color: var(--accent, #4E79A7); flex: none; }
+.switch-row small { font-size: 12px; }

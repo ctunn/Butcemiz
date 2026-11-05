@@ -44,6 +44,7 @@ export interface Txn {
   plan_key?: string | null; // identifies one installment purchase across statements
   inst_no?: number | null; // which installment this row is (1..N)
   projected?: boolean; // a future installment that has not appeared on a statement yet
+  shared?: boolean; // household (ev) expense shared by both, shown under the "Ev" group
   created_at: string;
 }
 

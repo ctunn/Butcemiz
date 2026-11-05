@@ -1,3 +1,4 @@
+import { missingDefaultCats } from '../lib/defaults';
 import type { Data, TableName } from '../types';
 import type { Backend } from './backend';
 import { emptyData } from '../lib/defaults';
@@ -20,7 +21,7 @@ export function readLocal(): Data {
     const d = JSON.parse(raw) as Partial<Data>;
     const base = emptyData();
     return {
-      categories: d.categories?.length ? d.categories : base.categories,
+      categories: d.categories?.length ? [...d.categories, ...missingDefaultCats(d.categories)] : base.categories,
       people: d.people?.length ? d.people : base.people,
       cards: d.cards ?? base.cards,
       txns: d.txns ?? [],

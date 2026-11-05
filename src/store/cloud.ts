@@ -61,9 +61,9 @@ export class CloudBackend implements Backend {
     const payload = (rows as any[]).map((r) => ({ ...r, household_id: this.householdId }));
     let { error } = await this.s.from(table).upsert(payload, { onConflict: 'household_id,id' });
     // Database not yet updated with the v1.1 columns: save without them rather than failing.
-    if (error && /pay_month|cut_day|due_day|plan_key|inst_no|projected/.test(error.message || '')) {
+    if (error && /pay_month|cut_day|due_day|plan_key|inst_no|projected|shared/.test(error.message || '')) {
       // planned installments can't be told apart without the new columns, so they are skipped
-      const stripped = payload.filter((r) => !r.projected).map(({ pay_month, cut_day, due_day, plan_key, inst_no, projected, ...rest }) => rest);
+      const stripped = payload.filter((r) => !r.projected).map(({ pay_month, cut_day, due_day, plan_key, inst_no, projected, shared, ...rest }) => rest);
       ({ error } = await this.s.from(table).upsert(stripped, { onConflict: 'household_id,id' }));
     }
     if (error) throw error;
