@@ -10,6 +10,7 @@ import { PALETTE, emptyData } from '../lib/defaults';
 import { demoData } from '../lib/demo';
 import { uid } from '../lib/id';
 import { findDuplicates } from '../lib/dedupe';
+import { repairPlans } from '../lib/installments';
 import type { BankId, Card, Category, Data, Kind, Lang, Person } from '../types';
 
 function download(name: string, content: string, type: string) {
@@ -116,7 +117,7 @@ export function Settings() {
             const total = d.reduce((a, x) => a + x.amount, 0);
             const list = d.slice(0, 8).map((x) => `• ${x.date.slice(8, 10)}.${x.date.slice(5, 7)} ${(x.note || '').slice(0, 28)} ${h.money(x.amount)}`).join('\n') + (d.length > 8 ? '\n…' : '');
             if (!(await askConfirm(t('duplicatesFound', { n: d.length, amount: h.money(total) }) + '\n\n' + list))) return;
-            try { await store.remove('txns', d.map((x) => x.id)); toast(t('deleted')); } catch (e: any) { toast(t('error') + ': ' + (e?.message || e), 'err'); }
+            try { await store.remove('txns', d.map((x) => x.id)); const fix = repairPlans(store.get().data.txns); if (fix.length) await store.upsert('txns', fix); toast(t('deleted')); } catch (e: any) { toast(t('error') + ': ' + (e?.message || e), 'err'); }
           }}>🔍 {t('findDuplicates')}</button>
           <input ref={restoreRef} type="file" accept="application/json,.json" className="sr" id="restore" onChange={(e) => restore(e.target.files?.[0])} />
           <label htmlFor="restore" className="btn block">⬆️ {t('importJson')}</label>

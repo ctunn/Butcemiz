@@ -9,7 +9,7 @@ import { uid } from '../lib/id';
 import { payMonthFor } from '../lib/paymonth';
 import { merchantKey } from '../lib/text';
 import { HOME_CATS } from '../lib/defaults';
-import { buildRecurring, recurringInfo, syncPlan } from '../lib/installments';
+import { buildRecurring, noteInstallment, recurringInfo, syncPlan } from '../lib/installments';
 import type { Kind, Txn } from '../types';
 
 export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?: Txn | null; initialKind?: Kind; onDone: () => void }) {
@@ -139,7 +139,7 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
         </label>
       )}
 
-      {kind === 'expense' && !initial?.plan_key && (
+      {kind === 'expense' && !initial?.plan_key && !noteInstallment(initial?.note) && (
         <label className="field"><span>{t('repeatMonthly')}</span>
           <select value={repeat} onChange={(e) => setRepeat(Number(e.target.value))} aria-label={t('repeatCount')}>
             <option value={0}>{t('repeatNone')}</option>

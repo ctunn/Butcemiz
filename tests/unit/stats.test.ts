@@ -62,7 +62,7 @@ describe('payment month', () => {
 });
 
 
-import { buildImport, planUndo, isInstallmentDuplicate, buildRecurring, recurringInfo, syncPlan } from '../../src/lib/installments';
+import { buildImport, planUndo, isInstallmentDuplicate, buildRecurring, recurringInfo, syncPlan, repairPlans } from '../../src/lib/installments';
 
 describe('installment planning', () => {
   let n = 0;
@@ -232,5 +232,24 @@ describe('duplicate finder: planned copies', () => {
       { ...base, id: 'q', date: '2026-10-01', source: 'projected', projected: true, inst_no: 3, pay_month: '2026-12' },
     ] as Txn[]);
     expect(d.map((x) => x.id)).toEqual(['p']);
+  });
+});
+
+describe('repair installment rows saved before plans existed', () => {
+  const old = (id: string, note: string, extra: Partial<Txn> = {}): Txn => ({ id, kind: 'expense', amount: 2190.3, date: '2026-10-17', category_id: 'home_shopping', person_id: 'p1', card_id: 'g', note, source: 'import', import_id: 'i0', created_at: 'x', pay_month: '2026-11', shared: true, ...extra });
+  it('adds the missing months with the same category and Ev flag', () => {
+    const fix = repairPlans([old('a', 'BAUHAUS İNŞAAT (2/6)')]);
+    expect(fix.map((x) => [x.id, x.inst_no, x.pay_month, !!x.projected])).toEqual([
+      ['a', 2, '2026-11', false], ['a-p3', 3, '2026-12', true], ['a-p4', 4, '2027-01', true], ['a-p5', 5, '2027-02', true], ['a-p6', 6, '2027-03', true]]);
+    expect(fix.every((x) => x.category_id === 'home_shopping' && x.shared)).toBe(true);
+    // once repaired nothing more happens; same ids if two phones repair at once
+    const all = fix;
+    expect(repairPlans(all)).toEqual([]);
+    expect(repairPlans([old('a', 'BAUHAUS İNŞAAT (2/6)')]).map((x) => x.id)).toEqual(fix.map((x) => x.id));
+  });
+  it('does not plan months that already exist and ignores last installments and plain rows', () => {
+    const later = old('b', 'BAUHAUS İNŞAAT (3/6)', { plan_key: 'g|2026-10-17|6|2190|bauhaus insaat', inst_no: 3, pay_month: '2026-12' });
+    const fix = repairPlans([old('a', 'BAUHAUS İNŞAAT (2/6)'), later, old('c', 'MIGROS (6/6)'), old('d', 'MARKET')]);
+    expect(fix.map((x) => x.id)).toEqual(['a', 'a-p4', 'a-p5', 'a-p6', 'c']);
   });
 });

@@ -3,6 +3,7 @@ import type { Data, TableName, Lang } from '../types';
 import type { Backend } from './backend';
 import { LocalBackend, readLocal } from './local';
 import { missingDefaultCats } from '../lib/defaults';
+import { repairPlans } from '../lib/installments';
 
 export interface Prefs { lang: Lang; currency: string; defaultPersonId: string | null; monthBasis: 'pay' | 'purchase' }
 const PREFS_KEY = 'budget-prefs';
@@ -39,6 +40,9 @@ export const store = {
       set({ data, syncing: false });
       const add = missingDefaultCats(data.categories);
       if (add.length) await store.upsert('categories', add).catch(() => {});
+      // installment rows saved before plans existed get their future months
+      const fix = repairPlans(data.txns);
+      if (fix.length) await store.upsert('txns', fix).catch(() => {});
       unsub = b.subscribe ? b.subscribe(() => store.reload()) : null;
     } catch (e: any) {
       set({ syncing: false, error: e?.message || String(e) });

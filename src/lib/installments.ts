@@ -111,6 +111,42 @@ export function syncPlan(changed: Txn[], all: Txn[]): Txn[] {
   return out;
 }
 
+/** "(2/6)" at the end of a note written by the importer. */
+export function noteInstallment(note: string | null | undefined): { n: number; of: number } | null {
+  const m = note?.match(/\((\d{1,2})\/(\d{1,2})\)\s*$/);
+  return m ? parseInst(`${+m[1]}/${+m[2]}`) : null;
+}
+
+/**
+ * Installment rows saved before plans existed (note says "(2/6)" but no plan): give them their plan
+ * and add the missing future months. Planned ids are derived from the row id, so running this on
+ * both phones at once cannot create two copies. Returns rows to save.
+ */
+export function repairPlans(txns: Txn[]): Txn[] {
+  const out: Txn[] = [];
+  const known = (card: string | null, mk: string, of: number, n: number, amount: number) =>
+    [...txns, ...out].some((x) => x.plan_key && !isRecurringKey(x.plan_key) && (x.card_id || null) === card && x.inst_no === n
+      && +x.plan_key.split('|')[2] === of && x.plan_key.split('|').slice(4).join('|') === mk && Math.abs(x.amount - amount) <= 1);
+  for (const x of txns) {
+    if (x.projected || x.plan_key || x.kind !== 'expense') continue;
+    const inst = noteInstallment(x.note);
+    if (!inst) continue;
+    const desc = x.note.replace(/\s*\(\d{1,2}\/\d{1,2}\)\s*$/, '');
+    const key = planKey(x.card_id, x.date, inst.of, x.amount, desc);
+    const mk = merchantKey(desc);
+    const start = x.pay_month || x.date.slice(0, 7);
+    out.push({ ...x, plan_key: key, inst_no: inst.n });
+    for (let k = inst.n + 1; k <= inst.of; k++) {
+      if (known(x.card_id, mk, inst.of, k, x.amount)) continue;
+      out.push({
+        ...x, id: `${x.id}-p${k}`, source: 'projected', projected: true, plan_key: key, inst_no: k,
+        pay_month: shiftMonth(start, k - inst.n), note: `${desc} (${k}/${inst.of})`,
+      });
+    }
+  }
+  return out;
+}
+
 export const isRecurringKey = (k: string | null | undefined) => !!k && k.startsWith('rec|');
 
 /** "rec|<first id>|<total>": n of total for a monthly payment series. */
