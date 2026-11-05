@@ -206,3 +206,31 @@ describe('category and Ev flag follow the whole installment purchase', () => {
     expect(imp[0]).toMatchObject({ category_id: 'loan', shared: true, id: plan[1].id });
   });
 });
+
+import { findDuplicates } from '../../src/lib/dedupe';
+describe('duplicate finder', () => {
+  const t = (id: string, imp: string | null, extra: Partial<Txn> = {}): Txn => ({ id, kind: 'expense', amount: 2190.3, date: '2026-10-17', category_id: 'other', person_id: 'p1', card_id: 'g', note: 'BAUHAUS', source: imp ? 'import' : 'manual', import_id: imp, created_at: imp || 'm', pay_month: '2026-11', ...extra });
+  it('finds a statement imported twice, keeps the copy with the plan', () => {
+    const d = findDuplicates([t('a', 'i1'), t('b', 'i2', { plan_key: 'k', inst_no: 1 }), t('c', 'i1', { amount: 50 })]);
+    expect(d.map((x) => x.id)).toEqual(['a']);
+  });
+  it('two equal purchases on one statement are not duplicates', () => {
+    expect(findDuplicates([t('a', 'i1'), t('b', 'i1')])).toEqual([]);
+  });
+  it('a hand-typed row that the statement also brought is a duplicate; planned rows are ignored', () => {
+    expect(findDuplicates([t('m', null), t('a', 'i1')]).map((x) => x.id)).toEqual(['m']); // the statement copy stays
+    expect(findDuplicates([t('p', null, { projected: true }), t('a', 'i1')])).toEqual([]);
+  });
+});
+
+describe('duplicate finder: planned copies', () => {
+  it('a planned row whose installment is already real is extra', () => {
+    const base = { kind: 'expense' as const, amount: 100, category_id: 'home_shopping', person_id: 'p1', card_id: 'g', note: 'X', created_at: 'x', plan_key: 'k' };
+    const d = findDuplicates([
+      { ...base, id: 'r', date: '2026-10-01', source: 'import', import_id: 'i', inst_no: 2, pay_month: '2026-11' },
+      { ...base, id: 'p', date: '2026-10-01', source: 'projected', projected: true, inst_no: 2, pay_month: '2026-11' },
+      { ...base, id: 'q', date: '2026-10-01', source: 'projected', projected: true, inst_no: 3, pay_month: '2026-12' },
+    ] as Txn[]);
+    expect(d.map((x) => x.id)).toEqual(['p']);
+  });
+});

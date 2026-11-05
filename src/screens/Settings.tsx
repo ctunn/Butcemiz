@@ -9,6 +9,7 @@ import { BANK_NAMES } from '../lib/banks';
 import { PALETTE, emptyData } from '../lib/defaults';
 import { demoData } from '../lib/demo';
 import { uid } from '../lib/id';
+import { findDuplicates } from '../lib/dedupe';
 import type { BankId, Card, Category, Data, Kind, Lang, Person } from '../types';
 
 function download(name: string, content: string, type: string) {
@@ -109,6 +110,14 @@ export function Settings() {
         <div className="stack">
           <button className="btn block" onClick={() => download(`budget-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(data, null, 1), 'application/json')}>⬇️ {t('exportJson')}</button>
           <button className="btn block" onClick={exportCsv}>📊 {t('exportCsv')}</button>
+          <button className="btn block" onClick={async () => {
+            const d = findDuplicates(data.txns);
+            if (!d.length) { toast(t('noDuplicates')); return; }
+            const total = d.reduce((a, x) => a + x.amount, 0);
+            const list = d.slice(0, 8).map((x) => `• ${x.date.slice(8, 10)}.${x.date.slice(5, 7)} ${(x.note || '').slice(0, 28)} ${h.money(x.amount)}`).join('\n') + (d.length > 8 ? '\n…' : '');
+            if (!(await askConfirm(t('duplicatesFound', { n: d.length, amount: h.money(total) }) + '\n\n' + list))) return;
+            try { await store.remove('txns', d.map((x) => x.id)); toast(t('deleted')); } catch (e: any) { toast(t('error') + ': ' + (e?.message || e), 'err'); }
+          }}>🔍 {t('findDuplicates')}</button>
           <input ref={restoreRef} type="file" accept="application/json,.json" className="sr" id="restore" onChange={(e) => restore(e.target.files?.[0])} />
           <label htmlFor="restore" className="btn block">⬆️ {t('importJson')}</label>
           <button className="btn block" onClick={async () => { if (await askConfirm(t('restoreConfirm'))) { await store.replaceAll(demoData()); toast(t('saved')); } }}>🧪 {t('demoData')}</button>

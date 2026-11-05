@@ -18,6 +18,7 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
   const [person, setPerson] = useState<string | null>(null);
   const [kind, setKind] = useState<Kind>('expense');
   const [sel, setSel] = useState<string | null>(null);
+  const [selCard, setSelCard] = useState<string | null>(null);
 
   // Card spending always counts in the month the bill is paid (chosen by the household).
   const basis = 'pay' as const;
@@ -97,9 +98,16 @@ export function Home({ month, setMonth, onEdit }: { month: string; setMonth: (m:
           <ul className="bars">
             {byCard.map(([id, v]) => (
               <li key={id}>
+                <button className={'bar-btn' + (selCard === id ? ' on' : '')} onClick={() => setSelCard(selCard === id ? null : id)} aria-expanded={selCard === id}>
                 <span className="bar-label">{id === 'cash' ? t('cash') : (h.card(id)?.name || '?') + (h.person(h.card(id)?.person_id ?? null) ? ' · ' + h.person(h.card(id)!.person_id)!.name : '')}</span>
                 <span className="bar-track"><span className="bar-fill" style={{ width: `${(v / tot.expense) * 100}%` }} /></span>
                 <span className="bar-amt">{h.money(v, true)}</span>
+                </button>
+                {selCard === id && (
+                  <div className="legend-detail">
+                    {monthTx.filter((x) => x.kind === 'expense' && (x.card_id || 'cash') === id).sort((a, b) => b.date.localeCompare(a.date)).map((x) => <TxnRow key={x.id} t={x} onClick={() => onEdit(x)} />)}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
