@@ -41,7 +41,7 @@ export function App() {
       </header>
       {error && (
         <div className="banner err" role="alert">
-          <span>{t('error')}: {error}</span>
+          <span>{error === 'schemaOld' ? t('schemaOld') : `${t('error')}: ${error}`}</span>
           <button className="link" onClick={() => store.clearError()} aria-label={t('close')}><Icon name="close" size={18} /></button>
         </div>
       )}

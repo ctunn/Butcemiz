@@ -65,6 +65,8 @@ export class CloudBackend implements Backend {
       // planned installments can't be told apart without the new columns, so they are skipped
       const stripped = payload.filter((r) => !r.projected).map(({ pay_month, cut_day, due_day, plan_key, inst_no, projected, shared, ...rest }) => rest);
       ({ error } = await this.s.from(table).upsert(stripped, { onConflict: 'household_id,id' }));
+      // tell the user: planned rows and the Ev flag are not being saved until schema.sql is re-run
+      if (!error && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('budget-schema-old'));
     }
     if (error) throw error;
   }

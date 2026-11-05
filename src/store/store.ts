@@ -89,6 +89,8 @@ export const store = {
   clearError() { set({ error: null }); },
 };
 
+if (typeof window !== 'undefined') window.addEventListener('budget-schema-old', () => set({ error: 'schemaOld' }));
+
 export function useStore(): State {
   return useSyncExternalStore(store.subscribe, store.get);
 }
