@@ -9,7 +9,7 @@ import { uid } from '../lib/id';
 import { payMonthFor } from '../lib/paymonth';
 import { merchantKey } from '../lib/text';
 import { HOME_CATS } from '../lib/defaults';
-import { buildRecurring, recurringInfo } from '../lib/installments';
+import { buildRecurring, recurringInfo, syncPlan } from '../lib/installments';
 import type { Kind, Txn } from '../types';
 
 export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?: Txn | null; initialKind?: Kind; onDone: () => void }) {
@@ -59,7 +59,9 @@ export function TxnForm({ initial, initialKind = 'expense', onDone }: { initial?
     const rows = repeat > 0 && !initial?.plan_key ? buildRecurring(row, repeat, uid) : [row];
     setBusy(true);
     try {
-      await store.upsert('txns', rows);
+      // a changed category / Ev flag applies to every month of the same installment purchase or series
+      const follow = initial?.plan_key ? syncPlan(rows, data.txns) : [];
+      await store.upsert('txns', [...rows, ...follow]);
       // Re-categorising an imported item teaches the importer for next time.
       if (initial?.source === 'import' && initial.category_id !== category && initial.note) {
         const key = merchantKey(initial.note);

@@ -62,7 +62,7 @@ describe('payment month', () => {
 });
 
 
-import { buildImport, planUndo, isInstallmentDuplicate, buildRecurring, recurringInfo } from '../../src/lib/installments';
+import { buildImport, planUndo, isInstallmentDuplicate, buildRecurring, recurringInfo, syncPlan } from '../../src/lib/installments';
 
 describe('installment planning', () => {
   let n = 0;
@@ -167,5 +167,41 @@ describe('monthly repeat (loan) and the Home group', () => {
   it('existing households get the new home categories', () => {
     expect(missingDefaultCats([{ id: 'groceries' } as any]).map((x) => x.id)).toEqual(['home_bills', 'home_shopping']);
     expect(missingDefaultCats([])).toEqual([]);
+  });
+});
+
+describe('category and Ev flag follow the whole installment purchase', () => {
+  let n = 0;
+  const ctx = (payMonth: string, importId: string) => ({ cardId: 'g', personId: 'p1', payMonth, importId, now: 'x', uid: () => 'q' + n++ });
+  const row = (inst: string, category = 'other') => ({ date: '2026-10-17', description: 'BAUHAUS İNŞAAT', amount: 2190.3, kind: 'expense' as const, category, suggested: 'other', installment: inst });
+
+  it('editing one month updates the planned months, and next statement keeps the choice', () => {
+    const first = buildImport([row('1/6')], [], ctx('2026-11', 'i1'));
+    const edited = { ...first[0], category_id: 'home_shopping', shared: true };
+    const follow = syncPlan([edited], first);
+    expect(follow).toHaveLength(5);
+    expect(follow.every((x) => x.category_id === 'home_shopping' && x.shared && x.projected)).toBe(true);
+    const all = first.map((x) => (x.id === edited.id ? edited : follow.find((f) => f.id === x.id) ?? x));
+    const dec = buildImport([row('2/6')], all, ctx('2026-12', 'i2')); // suggested 'other' again
+    expect(dec).toHaveLength(1);
+    expect(dec[0]).toMatchObject({ category_id: 'home_shopping', shared: true, projected: false });
+    const merged = all.map((x) => (x.id === dec[0].id ? dec[0] : x));
+    expect(filterTxns(merged, { month: '2026-12', personId: HOME_GROUP, basis: 'pay' }).map((x) => x.id)).toEqual([dec[0].id]);
+    expect(filterTxns(merged, { month: '2026-12', basis: 'pay' })).toHaveLength(1); // not doubled
+  });
+
+  it('a category picked on the import screen wins and is passed on', () => {
+    const first = buildImport([row('1/6')], [], ctx('2026-11', 'i1'));
+    const dec = buildImport([row('2/6', 'home_bills')], first, ctx('2026-12', 'i2'));
+    expect(dec[0].category_id).toBe('home_bills');
+    expect(syncPlan(dec, first).map((x) => x.inst_no)).toEqual([1, 3, 4, 5, 6]);
+  });
+
+  it('loan series: Ev flag on the first payment carries to the plans and to the imported payment', () => {
+    const base: Txn = { id: 'L', kind: 'expense', amount: 1000, date: '2026-10-10', category_id: 'loan', person_id: 'p1', card_id: null, note: 'Kredi', source: 'manual', created_at: 'x', shared: true };
+    const plan = buildRecurring(base, 2, () => 'L' + n++);
+    expect(plan.every((x) => x.shared)).toBe(true);
+    const imp = buildImport([{ date: '2026-11-10', description: 'KREDI', amount: 1000, kind: 'expense', category: 'other', suggested: 'other' }], plan, { ...ctx('', 'a'), cardId: 'acc', payMonth: null });
+    expect(imp[0]).toMatchObject({ category_id: 'loan', shared: true, id: plan[1].id });
   });
 });

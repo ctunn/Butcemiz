@@ -11,7 +11,7 @@ import { uid } from '../lib/id';
 import type { BankId, Kind, Txn } from '../types';
 import type { RowFlag } from '../import/parse';
 import { BANK_NAMES } from '../lib/banks';
-import { buildImport, isInstallmentDuplicate, isRecurringKey, parseInst, planUndo } from '../lib/installments';
+import { buildImport, isInstallmentDuplicate, isRecurringKey, parseInst, planUndo, syncPlan } from '../lib/installments';
 import { HOME_CATS } from '../lib/defaults';
 
 interface Row { key: string; date: string; description: string; amount: number; kind: Kind; category: string; include: boolean; flag: RowFlag; dup: boolean; installment?: string | null; suggested: string }
@@ -94,13 +94,17 @@ export function Import() {
     const pool = data.txns.filter((x) => x.card_id === (cardId || null) || (!x.card_id && isRecurringKey(x.plan_key)));
     const txns: Txn[] = buildImport(selected, pool, {
       cardId: cardId || null, personId: card?.person_id ?? null, payMonth: isCard ? payMonth : null, importId, now, uid,
-    }).map((x) => (HOME_CATS.has(x.category_id) && !x.shared ? { ...x, shared: true } : x));
+    }).map((x) => {
+      // home categories start as Ev expenses, unless this purchase already has a choice from an earlier month
+      const known = x.plan_key && data.txns.some((y) => y.plan_key === x.plan_key);
+      return HOME_CATS.has(x.category_id) && !x.shared && !known ? { ...x, shared: true } : x;
+    });
     // learn categories the user corrected
     const learned = new Map<string, string>();
     for (const r of selected) if (r.kind === 'expense' && r.category !== r.suggested) { const k = merchantKey(r.description); if (k) learned.set(k, r.category); }
     setBusy(true);
     try {
-      await store.upsert('txns', txns);
+      await store.upsert('txns', [...txns, ...syncPlan(txns.filter((x) => !x.projected), data.txns)]);
       // Remember the card's cut-off and due days so manual card entries land in the right month.
       if (card && isCard && stmtDates.cut && stmtDates.due) {
         const cut_day = Number(stmtDates.cut.slice(8, 10)), due_day = Number(stmtDates.due.slice(8, 10));

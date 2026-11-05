@@ -14,7 +14,14 @@ export function planKey(cardId: string | null, date: string, of: number, amount:
   return [cardId || '-', date, of, Math.round(amount), merchantKey(desc)].join('|');
 }
 
-export interface ImportRow { date: string; description: string; amount: number; kind: Kind; category: string; installment?: string | null }
+export interface ImportRow { date: string; description: string; amount: number; kind: Kind; category: string; installment?: string | null; suggested?: string }
+
+/** Category and Ev flag the user gave the plan win, unless they changed the category on this import. */
+function keepPlan(r: ImportRow, p: Txn | undefined): Partial<Txn> {
+  if (!p) return {};
+  const userPicked = r.suggested !== undefined && r.category !== r.suggested;
+  return { category_id: userPicked ? r.category : p.category_id, shared: !!p.shared };
+}
 
 export interface ImportCtx {
   cardId: string | null;
@@ -59,7 +66,7 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
     if (!inst) {
       // A monthly payment planned by hand (loan, rent): the real statement row replaces this month's plan.
       const rec = r.kind === 'expense' ? findRecurring(existing, out, ctx, r) : undefined;
-      out.push(rec ? { ...base, id: rec.id, plan_key: rec.plan_key, inst_no: rec.inst_no, shared: rec.shared } : base);
+      out.push(rec ? { ...base, id: rec.id, plan_key: rec.plan_key, inst_no: rec.inst_no, ...keepPlan(r, rec) } : base);
       continue;
     }
     let key = planKey(ctx.cardId, r.date, inst.of, r.amount, r.description);
@@ -69,15 +76,37 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
     // purchase can carry a different date each month: then keep the plan we already have.
     if (planned?.plan_key) key = planned.plan_key;
     // reuse the planned row's id so it is overwritten, not duplicated
-    out.push({ ...base, id: planned ? planned.id : base.id, plan_key: key, inst_no: inst.n });
+    // keep the category / Ev flag the user gave this purchase in an earlier month
+    const prior = planned ?? existing.find((x) => x.plan_key === key && !x.projected);
+    const kept = keepPlan(r, prior);
+    const row: Txn = { ...base, ...kept, id: planned ? planned.id : base.id, plan_key: key, inst_no: inst.n };
+    out.push(row);
     const startMonth = ctx.payMonth || r.date.slice(0, 7);
     for (let k = inst.n + 1; k <= inst.of; k++) {
       if (has(key, k)) continue;
       out.push({
-        ...base, id: ctx.uid(), source: 'projected', projected: true, plan_key: key, inst_no: k,
+        ...base, ...kept, id: ctx.uid(), source: 'projected', projected: true, plan_key: key, inst_no: k,
         pay_month: shiftMonth(startMonth, k - inst.n), note: r.description + ` (${k}/${inst.of})`,
       });
     }
+  }
+  return out;
+}
+
+/**
+ * Other months of the same purchase / series that must follow a changed category or Ev flag.
+ * Returns the rows of `all` to update (rows in `changed` themselves are left out).
+ */
+export function syncPlan(changed: Txn[], all: Txn[]): Txn[] {
+  const ids = new Set(changed.map((x) => x.id));
+  const byKey = new Map<string, Txn>();
+  for (const x of changed) if (x.plan_key && !x.projected) byKey.set(x.plan_key, x);
+  for (const x of changed) if (x.plan_key && !byKey.has(x.plan_key)) byKey.set(x.plan_key, x);
+  const out: Txn[] = [];
+  for (const y of all) {
+    if (ids.has(y.id) || !y.plan_key) continue;
+    const src = byKey.get(y.plan_key);
+    if (src && (y.category_id !== src.category_id || !!y.shared !== !!src.shared)) out.push({ ...y, category_id: src.category_id, shared: !!src.shared });
   }
   return out;
 }
