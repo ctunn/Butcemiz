@@ -31,7 +31,6 @@ export function App() {
     { id: 'txns', icon: 'list', label: t('txns') },
     { id: 'add', icon: 'plus', label: t('add') },
     { id: 'shop', icon: 'cart', label: t('shop') },
-    { id: 'import', icon: 'import', label: t('import') },
     { id: 'settings', icon: 'settings', label: t('settings') },
   ];
 
@@ -64,6 +63,10 @@ export function App() {
         ))}
       </nav>
       <Sheet open={adding} onClose={() => setAdding(false)} title={t('addExpense')}>
+        {/* statements are imported from here, so the tab bar stays: Özet · İşlemler · + · Liste · Ayarlar */}
+        <button type="button" className="btn block import-entry" onClick={() => { setAdding(false); setTab('import'); }}>
+          <Icon name="import" size={20} /> {t('importStatement')}
+        </button>
         <TxnForm onDone={() => setAdding(false)} />
       </Sheet>
       <Sheet open={!!editing} onClose={() => setEditing(null)} title={t('editTxn')}>

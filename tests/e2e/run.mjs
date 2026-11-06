@@ -64,7 +64,13 @@ async function expectText(loc, expected, msg, timeout = 5000) {
 const LOCAL_KEY = 'budget-data-v1';
 async function data(page) { return page.evaluate((k) => JSON.parse(localStorage.getItem(k) || 'null'), LOCAL_KEY); }
 async function txns(page) { return (await data(page))?.txns || []; }
-async function tab(page, name) { await page.locator('nav.tabbar').getByRole('button', { name, exact: true }).click(); await visible(page.locator('header.topbar h1', { hasText: name === 'Özet' ? 'Bütçemiz' : name }), `screen "${name}" did not open`); }
+async function tab(page, name) {
+  if (name === 'Ekstreler') { // statements open from the + sheet
+    await page.getByRole('button', { name: 'Harcama ekle' }).click();
+    await page.getByRole('button', { name: /Ekstre yükle/ }).click();
+    await visible(page.locator('header.topbar h1', { hasText: 'Ekstreler' }), 'import screen did not open');
+    return;
+  } await page.locator('nav.tabbar').getByRole('button', { name, exact: true }).click(); await visible(page.locator('header.topbar h1', { hasText: name === 'Özet' ? 'Bütçemiz' : name }), `screen "${name}" did not open`); }
 function sheet(page, title) { return page.getByRole('dialog', { name: title }); }
 async function openAdd(page) {
   await page.getByRole('button', { name: 'Harcama ekle' }).click();
@@ -236,7 +242,7 @@ const tc = (id, area, title, fn, opts = {}) => cases.push({ id, area, title, fn,
 tc('TC01', 'Genel', 'First launch shows Turkish UI and empty state', async ({ page }) => {
   await expectText(page.locator('header.topbar h1'), 'Bütçemiz', 'title');
   assert((await page.evaluate(() => document.documentElement.lang)) === 'tr', 'html lang should be tr');
-  for (const l of ['Özet', 'İşlemler', 'Ekstreler', 'Ayarlar']) await visible(page.locator('nav.tabbar').getByRole('button', { name: l, exact: true }), `tab ${l} missing`);
+  for (const l of ['Özet', 'İşlemler', 'Liste', 'Ayarlar']) await visible(page.locator('nav.tabbar').getByRole('button', { name: l, exact: true }), `tab ${l} missing`);
   await visible(page.getByText('Henüz kayıt yok'), 'empty state missing on Özet');
   await expectText(stat(page, 'Gelir'), '₺0', 'income tile');
   await expectText(stat(page, 'Gider'), '₺0', 'expense tile');
@@ -595,7 +601,7 @@ tc('TC28', 'Özet', 'Uncategorised / deleted-category transaction does not break
 tc('TC29', 'Ayarlar', 'Language switch to English and back; persists after reload', async ({ page }) => {
   await tab(page, 'Ayarlar');
   await page.getByRole('tab', { name: 'English' }).click();
-  for (const l of ['Summary', 'Transactions', 'Statements', 'Settings']) await visible(page.locator('nav.tabbar').getByRole('button', { name: l, exact: true }), `EN tab ${l}`);
+  for (const l of ['Summary', 'Transactions', 'List', 'Settings']) await visible(page.locator('nav.tabbar').getByRole('button', { name: l, exact: true }), `EN tab ${l}`);
   assert((await page.evaluate(() => document.documentElement.lang)) === 'en', 'html lang en');
   await page.reload();
   await visible(page.locator('nav.tabbar').getByRole('button', { name: 'Summary', exact: true }), 'EN persists after reload');
@@ -971,7 +977,8 @@ tc('TC47', 'Ekstreler', 'Imported card statement shows correctly in Summary pie 
   await expectText(stat(page, 'Gider'), '₺0', 'imported rows belong to card owner Eşim');
   await tab(page, 'Ayarlar');
   await page.getByRole('tab', { name: 'English' }).click();
-  await page.locator('nav.tabbar').getByRole('button', { name: 'Statements', exact: true }).click();
+  await page.getByRole('button', { name: 'Add expense' }).click();
+  await page.getByRole('button', { name: /Import a statement/ }).click();
   await visible(page.getByRole('heading', { name: 'Previous imports' }), 'Statements in English');
   await noHorizontalOverflow(page, 'Statements (EN)');
 });
