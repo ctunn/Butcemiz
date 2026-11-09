@@ -13,7 +13,7 @@ import { uid } from '../lib/id';
 import type { BankId, Kind, Txn } from '../types';
 import type { RowFlag } from '../import/parse';
 import { BANK_NAMES } from '../lib/banks';
-import { buildImport, findProvisional, isInstallmentDuplicate, isRecurringKey, parseInst, planUndo, syncPlan } from '../lib/installments';
+import { buildImport, findProvisional, isInstallmentDuplicate, isPlannedInstallment, isRecurringKey, parseInst, planUndo, syncPlan } from '../lib/installments';
 import { HOME_CATS } from '../lib/defaults';
 
 interface Row { key: string; date: string; description: string; amount: number; kind: Kind; category: string; include: boolean; flag: RowFlag; dup: boolean; installment?: string | null; suggested: string; prov?: boolean }
@@ -54,7 +54,7 @@ export function Import() {
       // a statement replaces screenshot rows instead of calling them duplicates
       const cardTxns = data.txns.filter((x) => x.card_id === useCard && (images || x.source !== 'screenshot'));
       const provTaken = new Set<string>();
-      const provOf = (r: { date: string; amount: number; kind: Kind }) => {
+      const provOf = (r: { date: string; amount: number; kind: Kind; installment?: string | null }) => {
         if (images) return false;
         const p = findProvisional(data.txns, provTaken, useCard || null, r);
         if (p) provTaken.add(p.id);
@@ -66,12 +66,13 @@ export function Import() {
       const out: Row[] = res.rows.map((r, i) => {
         let sug: string;
         if (r.kind === 'income') sug = r.hint === 'salary' ? 'salary' : 'other_income';
-        else sug = (r.hint && catIds.has(r.hint) ? r.hint : null) || suggestCategory(r.description, data.rules) || 'other';
+        else sug = (r.hint && catIds.has(r.hint) ? r.hint : null) || suggestCategory(r.description, data.rules) || (r.bankCat && catIds.has(r.bankCat) ? r.bankCat : null) || 'other';
         if (!catIds.has(sug)) sug = r.kind === 'income' ? 'other_income' : 'other';
         // installments: the same purchase shows up every month with the same date and amount, so match on the installment number
-        const dup = parseInst(r.installment) && r.kind === 'expense'
+        const dup = !!parseInst(r.installment) && r.kind === 'expense'
           // (rows saved before installment plans existed have no plan, so also compare date + amount)
           ? isInstallmentDuplicate({ ...r, category: '' }, useCard || null, cardTxns, res.mode === 'card' && res.dueDate ? res.dueDate.slice(0, 7) : null) || existing.has(`${r.date}|${r.amount}|${r.kind}`)
+            || (!!images && isPlannedInstallment({ ...r, category: '' }, useCard || null, data.txns))
           : existing.has(`${r.date}|${r.amount}|${r.kind}`);
         // transfers that clearly pay for something (e.g. "AİDAT") are kept
         const keepTransfer = r.flag === 'transfer' && r.kind === 'expense' && !!suggestCategory(r.description, data.rules);

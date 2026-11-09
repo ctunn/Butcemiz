@@ -41,15 +41,32 @@ export interface ImportCtx {
 const dayNo = (iso: string) => Math.round(Date.parse(iso + 'T12:00:00Z') / 86400000);
 
 /** A provisional (screenshot) row this statement row is: same card and amount, date within 3 days. */
-export function findProvisional(existing: Txn[], taken: Set<string>, cardId: string | null, r: { date: string; amount: number; kind: Kind }): Txn | undefined {
+export function findProvisional(existing: Txn[], taken: Set<string>, cardId: string | null, r: { date: string; amount: number; kind: Kind; installment?: string | null }): Txn | undefined {
   let best: Txn | undefined, bestD = 99;
+  const inst = parseInst(r.installment);
   for (const x of existing) {
     if (x.source !== 'screenshot' || x.projected || x.kind !== r.kind || (x.card_id || null) !== (cardId || null) || taken.has(x.id)) continue;
     if (Math.abs(x.amount - r.amount) > Math.max(0.05, r.amount * 0.002)) continue;
     const d = Math.abs(dayNo(x.date) - dayNo(r.date));
-    if (d <= 3 && d < bestD) { best = x; bestD = d; }
+    // the app may show a posting date and the statement the purchase date: same installment, same plan size
+    const sameInst = !!inst && x.inst_no === inst.n && !!x.plan_key && !isRecurringKey(x.plan_key) && +x.plan_key.split('|')[2] === inst.of;
+    if ((d <= 3 || (sameInst && d <= 40)) && d < bestD) { best = x; bestD = d; }
   }
   return best;
+}
+
+/**
+ * Screenshot rows for a later installment (n>1) of a purchase already on file: the plan already
+ * holds that month (planned or real), so the screenshot adds nothing.
+ */
+export function isPlannedInstallment(r: ImportRow, cardId: string | null, existing: Txn[]): boolean {
+  const inst = parseInst(r.installment);
+  if (!inst || inst.n < 2) return false;
+  const mk = merchantKey(r.description);
+  const same = (x: Txn) => x.inst_no === inst.n && !!x.plan_key && !isRecurringKey(x.plan_key) && (x.card_id || null) === (cardId || null)
+    && +x.plan_key.split('|')[2] === inst.of && Math.abs(x.amount - r.amount) <= 1;
+  const hits = existing.filter(same);
+  return hits.length === 1 || hits.some((x) => x.plan_key!.split('|').slice(4).join('|') === mk);
 }
 
 /** True when this installment of this purchase is already on file (not just planned). */

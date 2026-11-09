@@ -14,6 +14,7 @@ export interface ParsedRow {
   flag: RowFlag;
   hint?: 'fees' | 'loan' | 'salary' | null; // category hint from the bank's own wording
   installment?: string | null; // e.g. "2/6"
+  bankCat?: string | null; // our category for the bank app's own category label (screenshots)
 }
 
 export interface ParseResult {

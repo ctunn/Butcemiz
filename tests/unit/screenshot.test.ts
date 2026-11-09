@@ -44,3 +44,29 @@ describe('bank app screenshot (OCR lines)', () => {
     expect(mergeScreenshots([a, b]).rows.map((x) => x.description)).toEqual(['KAHVE', 'KAHVE', 'MIGROS', 'SHELL']);
   });
 });
+
+describe('Garanti app layout (day / month / year+merchant stacked)', () => {
+  const L = (t: string) => ({ text: t, y: 0 });
+  const lines = [
+    'BONUS PLATINUM TRINK', 'Ekstre Gelecek Dönem', 'Gerçekleşen Hareketler', '0,09 Bonus',
+    '28 Market -455,00 TL', 'Eki >', '2026 ORNEK FIRIN',
+    '28 Akaryakıt -50,00 TL', 'Eki', '2028 ORNEK PETROL A.S./ 6400 >', '0,02 Bonus',
+    '28 Elektronik -69.63742 TL', 'Eki >', '2026 APPLE.COM/US',
+    '26 Giyim / Aksesuar -383,00 TL', 'Eki >', '2026 ORNEK MAGAZA (4/6)',
+    '25 Yeme/ İçme -484,28 TL', 'Eki . >', '2026 ORNEK BUFE',
+  ].map(L);
+  const r = parseScreenshotLines(lines as any, '2026-11-09');
+  it('reads every row with date, amount and merchant', () => {
+    expect(r.rows.map((x) => [x.date, x.amount, x.kind])).toEqual([
+      ['2026-10-28', 455, 'expense'], ['2026-10-28', 50, 'expense'], ['2026-10-28', 69637.42, 'expense'],
+      ['2026-10-26', 383, 'expense'], ['2026-10-25', 484.28, 'expense'],
+    ]);
+    expect(r.rows[0].description).toMatch(/ORNEK FIRIN/);
+    expect(r.rows[1].description).toMatch(/ORNEK PETROL/);
+  });
+  it('maps bank categories and installments', () => {
+    expect(r.rows.map((x) => x.bankCat)).toEqual(['groceries', 'transport', 'shopping', 'shopping', 'dining']);
+    expect(r.rows[3].installment).toBe('4/6');
+    expect(r.rows[3].description).not.toMatch(/4\/6/);
+  });
+});
