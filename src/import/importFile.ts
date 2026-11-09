@@ -1,6 +1,19 @@
 import type { BankId } from '../types';
 import { parseCsvStatement } from './csv';
 import { parseStatementLines, detectBank, type ParseResult } from './parse';
+import { parseScreenshotLines, mergeScreenshots } from './screenshot';
+
+export function isImage(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(png|jpe?g|heic|heif|webp)$/i.test(file.name);
+}
+
+/** Bank-app screenshots: read each on the phone, merge overlapping ones. */
+export async function parseScreenshots(files: File[], today: string): Promise<ParseResult> {
+  const { imageToLines } = await import('./ocr');
+  const results: ParseResult[] = [];
+  for (const f of files) results.push(parseScreenshotLines(await imageToLines(f), today));
+  return mergeScreenshots(results);
+}
 
 export async function parseStatementFile(file: File, password?: string, bankHint?: BankId): Promise<ParseResult> {
   const name = file.name.toLowerCase();

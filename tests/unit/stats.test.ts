@@ -275,3 +275,50 @@ describe('repair plans', () => {
     expect(r.upsert.map((x) => [x.inst_no, x.date, x.projected])).toEqual([[2, '2026-12-05', true]]);
   });
 });
+
+describe('screenshot rows are provisional; the statement replaces them', () => {
+  let n = 0;
+  const uid = () => 's' + n++;
+  const card = { id: 'g', name: 'G', bank: 'garanti' as const, person_id: 'p1', kind: 'card' as const, cut_day: 25, due_day: 4 };
+  const shotCtx = { cardId: 'g', personId: 'p1', payMonth: null, importId: 'shot1', now: 'x', uid, source: 'screenshot' as const, payMonthOf: (d: string) => payMonthFor(d, card) };
+  const r = (date: string, description: string, amount: number, installment: string | null = null, category = 'groceries') => ({ date, description, amount, kind: 'expense' as const, category, suggested: category, installment });
+
+  it('screenshot rows get the card\'s payment month and are marked provisional', () => {
+    const out = buildImport([r('2026-11-08', 'MIGROS MAZHARBEY', 1245.9), r('2026-10-27', 'SHELL', 2000)], [], shotCtx);
+    expect(out.map((x) => [x.source, x.pay_month])).toEqual([['screenshot', '2026-12'], ['screenshot', '2026-12']]);
+  });
+
+  it('statement rows take over the provisional rows (same id, category kept), dates may differ by a few days', () => {
+    const shots = buildImport([r('2026-11-08', 'MIGROS', 1245.9, null, 'home_shopping'), r('2026-11-10', 'SHELL ACIBADEM', 2000, null, 'transport')], [], shotCtx);
+    const removed: string[] = [];
+    const stmt = buildImport([r('2026-11-09', 'MIGROS MAZHARBEY ISTANBUL TR', 1245.9, null, 'groceries'), r('2026-11-10', 'SHELL ACIBADEM', 2000, null, 'transport'), r('2026-11-12', 'NEW', 50)], shots,
+      { cardId: 'g', personId: 'p1', payMonth: '2026-12', importId: 'stmt', now: 'x', uid, removed });
+    expect(stmt.map((x) => x.id).slice(0, 2)).toEqual([shots[0].id, shots[1].id]);
+    expect(stmt[0]).toMatchObject({ source: 'import', category_id: 'home_shopping', note: 'MIGROS MAZHARBEY ISTANBUL TR', date: '2026-11-09' });
+    expect(stmt[2].id).not.toBe(shots[0].id);
+    const all = new Map([...shots, ...stmt].map((x) => [x.id, x]));
+    expect(totals(filterTxns([...all.values()], { month: '2026-12', basis: 'pay' })).expense).toBeCloseTo(3295.9, 2); // no doubles
+  });
+
+  it('a different amount or another card is not matched', () => {
+    const shots = buildImport([r('2026-11-08', 'MIGROS', 1245.9)], [], shotCtx);
+    const other = buildImport([r('2026-11-08', 'MIGROS', 1250)], shots, { cardId: 'g', personId: 'p1', payMonth: '2026-12', importId: 's', now: 'x', uid });
+    expect(other[0].id).not.toBe(shots[0].id);
+    const otherCard = buildImport([r('2026-11-08', 'MIGROS', 1245.9)], shots, { cardId: 'y', personId: 'p1', payMonth: '2026-12', importId: 's', now: 'x', uid });
+    expect(otherCard[0].id).not.toBe(shots[0].id);
+  });
+
+  it('installment seen on a screenshot ("6 Taksit") is replaced by the statement\'s 1/6 and its plan, no double months', () => {
+    const shots = buildImport([r('2026-11-06', 'BAUHAUS ATAŞEHİR', 2000, '1/6', 'home_shopping')], [], shotCtx);
+    expect(shots).toHaveLength(6);
+    const removed: string[] = [];
+    const stmt = buildImport([r('2026-11-06', 'BAUHAUS İNŞAAT MALZEMELER', 2000, '1/6')], shots, { cardId: 'g', personId: 'p1', payMonth: '2026-12', importId: 'stmt', now: 'x', uid, removed });
+    expect(stmt[0]).toMatchObject({ id: shots[0].id, source: 'import', category_id: 'home_shopping', inst_no: 1 });
+    expect(removed.sort()).toEqual(shots.slice(1).map((x) => x.id).sort()); // screenshot's planned months go
+    expect(stmt.filter((x) => x.projected)).toHaveLength(5); // the statement's own plan replaces them
+    const m = new Map(shots.map((x) => [x.id, x]));
+    for (const id of removed) m.delete(id);
+    for (const x of stmt) m.set(x.id, x);
+    for (const mo of ['2026-12', '2027-01', '2027-05']) expect(filterTxns([...m.values()], { month: mo, basis: 'pay' })).toHaveLength(1);
+  });
+});

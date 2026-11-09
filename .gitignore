@@ -6,3 +6,4 @@ test-results
 tests/private
 dist-preview
 tests/e2e/report
+public/ocr

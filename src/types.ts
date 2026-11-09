@@ -38,7 +38,7 @@ export interface Txn {
   person_id: string | null;
   card_id: string | null; // null = cash / bank account
   note: string;
-  source: 'manual' | 'import' | 'projected';
+  source: 'manual' | 'import' | 'projected' | 'screenshot'; // screenshot = provisional until the statement
   import_id?: string | null;
   pay_month?: string | null; // YYYY-MM the card bill is paid in (budget month); null = purchase month
   plan_key?: string | null; // identifies one installment purchase across statements

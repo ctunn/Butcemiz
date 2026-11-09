@@ -67,7 +67,7 @@ async function txns(page) { return (await data(page))?.txns || []; }
 async function tab(page, name) {
   if (name === 'Ekstreler') { // statements open from the + sheet
     await page.getByRole('button', { name: 'Harcama ekle' }).click();
-    await page.getByRole('button', { name: /Ekstre yükle/ }).click();
+    await page.getByRole('button', { name: /Ekstre \/ ekran/ }).click();
     await visible(page.locator('header.topbar h1', { hasText: 'Ekstreler' }), 'import screen did not open');
     return;
   } await page.locator('nav.tabbar').getByRole('button', { name, exact: true }).click(); await visible(page.locator('header.topbar h1', { hasText: name === 'Özet' ? 'Bütçemiz' : name }), `screen "${name}" did not open`); }
@@ -215,13 +215,25 @@ const FILES = {
   wrapPdf: path.join(TMP, 'garanti-uzun-aciklama.pdf'),
   lockedPdf: path.join(TMP, 'sifreli-ekstre.pdf'),
   wrongJson: path.join(TMP, 'yanlis-yedek.json'),
+  shot1: path.join(TMP, 'banka-ekran-1.png'),
+  shot2: path.join(TMP, 'banka-ekran-2.png'),
 };
+function shotHtml(groups) {
+  return `<html><body style="font-family:Helvetica,Arial;margin:0;background:#fff"><div style="padding:16px;font-weight:700;font-size:20px">Kart Hareketleri</div>${groups.map(([d, rows]) => `<div style="padding:10px 16px 4px;color:#666;font-size:14px">${d}</div>` + rows.map(([m, a, sub]) => `<div style="display:flex;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #eee"><div><div style="font-size:16px">${m}</div>${sub ? `<div style="font-size:13px;color:#888">${sub}</div>` : ''}</div><div style="font-size:16px;font-weight:600">${a}</div></div>`).join('')).join('')}<div style="padding:16px;color:#666">Kullanılabilir Limit 45.000,00 TL</div></body></html>`;
+}
 async function makeFiles(browser) {
   const pg = await browser.newPage();
   await pg.setContent(cardHtml()); await pg.pdf({ path: FILES.cardPdf, format: 'A4', landscape: true });
   await pg.setContent(accountHtml()); await pg.pdf({ path: FILES.accPdf, format: 'A4', landscape: true });
   await pg.setContent(wrapHtml()); await pg.pdf({ path: FILES.wrapPdf, format: 'A4' });
   await pg.close();
+  // fake bank-app screenshots (made-up merchants), the second overlaps the first
+  const sp = await browser.newPage({ viewport: { width: 390, height: 700 }, deviceScaleFactor: 3 });
+  await sp.setContent(shotHtml([['8 Kasım 2026', [['MIGROS MAZHARBEY', '-1.245,90 TL', ''], ['SHELL ACIBADEM', '-2.000,00 TL', '']]], ['6 Kasım 2026', [['BAUHAUS ATAŞEHİR', '-12.000,00 TL', '6 Taksit'], ['IYZICO/TRENDYOL', '+349,99 TL', 'İade']]]]));
+  await sp.screenshot({ path: FILES.shot1 });
+  await sp.setContent(shotHtml([['6 Kasım 2026', [['IYZICO/TRENDYOL', '+349,99 TL', 'İade']]], ['3 Kasım 2026', [['STARBUCKS ZORLU', '-185,00 TL', '']]]]));
+  await sp.screenshot({ path: FILES.shot2 });
+  await sp.close();
   // Encrypted copy of the card statement (password 123456) — needs python3 + pypdf; TC51 is skipped otherwise.
   try {
     execFileSync('python3', ['-c', 'import sys,pypdf\nr=pypdf.PdfReader(sys.argv[1]);w=pypdf.PdfWriter()\nfor p in r.pages: w.add_page(p)\nw.encrypt("123456", algorithm="RC4-128")\nw.write(sys.argv[2])', FILES.cardPdf, FILES.lockedPdf], { stdio: 'ignore' });
@@ -978,7 +990,7 @@ tc('TC47', 'Ekstreler', 'Imported card statement shows correctly in Summary pie 
   await tab(page, 'Ayarlar');
   await page.getByRole('tab', { name: 'English' }).click();
   await page.getByRole('button', { name: 'Add expense' }).click();
-  await page.getByRole('button', { name: /Import a statement/ }).click();
+  await page.getByRole('button', { name: /Import statement/ }).click();
   await visible(page.getByRole('heading', { name: 'Previous imports' }), 'Statements in English');
   await noHorizontalOverflow(page, 'Statements (EN)');
 });
@@ -1136,6 +1148,37 @@ tc('TC56', 'Alışveriş listesi', 'Add "süt, ekmek", tick one, clear bought; f
   s = await page.evaluate(() => JSON.parse(localStorage.getItem('budget-data-v1')).shopping);
   assert(s.find((x) => x.name === 'Robot süpürge').list === 'wish' && s.find((x) => x.name === 'Robot süpürge').price === 15000, 'stored on wish list with price');
   await noHorizontalOverflow(page, 'wishlist');
+}, { shot: true });
+
+tc('TC57', 'Ekran görüntüsü', 'Two overlapping bank-app screenshots → provisional rows; the statement replaces them without doubling', async ({ page }) => {
+  await tab(page, 'Ekstreler');
+  await page.getByLabel('Kart / hesap').selectOption({ label: 'Garanti Kart · Ben' }).catch(async () => {
+    await page.locator('select').first().selectOption('c-garanti-p1');
+  });
+  await page.locator('[data-testid="file-input"]').setInputFiles([FILES.shot1, FILES.shot2]);
+  await visible(page.getByRole('heading', { name: /işlem bulundu/ }), 'screenshot preview did not appear', 90000);
+  await expectText(page.getByRole('heading', { name: /işlem bulundu/ }), '5 işlem bulundu', 'overlapping row kept once');
+  const items = page.locator('ul.preview li');
+  await expectText(items.filter({ hasText: 'BAUHAUS' }), '−₺2.000', '6 taksit → this month 2.000');
+  assert(await items.filter({ hasText: 'TRENDYOL' }).evaluate((e) => e.classList.contains('off')), 'refund unticked');
+  await importBtn(page).click();
+  await toastHas(page, '4 işlem kaydedildi');
+  let d = await data(page);
+  const real = d.txns.filter((x) => !x.projected);
+  assert(real.length === 4 && real.every((x) => x.source === 'screenshot' && x.card_id === 'c-garanti-p1'), `provisional rows: ${JSON.stringify(real.map((x) => [x.note, x.source]))}`);
+  // the statement arrives: MIGROS a day later, SHELL same day, BAUHAUS as 1/6, STARBUCKS missing (cancelled)
+  const f = path.join(TMP, 'garanti-kasim.csv');
+  fs.writeFileSync(f, 'İşlem Tarihi;Açıklama;Tutar (TL)\n09.11.2026;MIGROS MAZHARBEY ISTANBUL;1.245,90\n08.11.2026;SHELL ACIBADEM;2.000,00\n06.11.2026;BAUHAUS INSAAT MALZ. 1/6 TAKSIT;2.000,00\n07.11.2026;YENI MAGAZA;300,00\n');
+  await upload(page, f);
+  await waitPreview(page);
+  assert((await items.filter({ hasText: 'ön kaydın yerine geçer' }).count()) === 3, 'three rows marked as replacing provisional entries');
+  await importBtn(page).click();
+  await toastHas(page, '3 ön kayıt ekstreyle eşleşti');
+  d = await data(page);
+  const now = d.txns.filter((x) => !x.projected);
+  assert(now.filter((x) => /MIGROS/.test(x.note)).length === 1 && now.filter((x) => /SHELL/.test(x.note)).length === 1 && now.filter((x) => /BAUHAUS/.test(x.note)).length === 1, `no doubles: ${JSON.stringify(now.map((x) => x.note))}`);
+  assert(now.find((x) => /MIGROS/.test(x.note)).source === 'import', 'statement row took over');
+  assert(d.txns.filter((x) => x.projected && /BAUHAUS/.test(x.note)).length === 5, 'one plan of 5 future months');
 }, { shot: true });
 
 tc('TC52', 'Düzen', 'Very long number typed in the amount field does not push the sheet wider than 393px', async ({ page }) => {

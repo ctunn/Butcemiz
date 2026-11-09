@@ -257,3 +257,4 @@ details[open] { display: flex; flex-direction: column; gap: 10px; }
 .shop-total { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .screen > .seg + .shop-add, .screen > .segmented + .shop-add { margin-top: 12px; }
 .import-entry { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
+.badge-prov { background: color-mix(in srgb, #F28E2B 18%, transparent); color: #B8641B; }

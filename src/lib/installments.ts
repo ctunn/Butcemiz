@@ -30,6 +30,26 @@ export interface ImportCtx {
   importId: string;
   now: string;
   uid: () => string;
+  /** 'screenshot': rows from bank-app screenshots, kept as provisional until the statement arrives */
+  source?: 'import' | 'screenshot';
+  /** payment month per row (screenshots: from the card's cut-off and due days) */
+  payMonthOf?: (date: string) => string | null;
+  /** filled with ids that must be deleted (planned months of a provisional row the statement replaced) */
+  removed?: string[];
+}
+
+const dayNo = (iso: string) => Math.round(Date.parse(iso + 'T12:00:00Z') / 86400000);
+
+/** A provisional (screenshot) row this statement row is: same card and amount, date within 3 days. */
+export function findProvisional(existing: Txn[], taken: Set<string>, cardId: string | null, r: { date: string; amount: number; kind: Kind }): Txn | undefined {
+  let best: Txn | undefined, bestD = 99;
+  for (const x of existing) {
+    if (x.source !== 'screenshot' || x.projected || x.kind !== r.kind || (x.card_id || null) !== (cardId || null) || taken.has(x.id)) continue;
+    if (Math.abs(x.amount - r.amount) > Math.max(0.05, r.amount * 0.002)) continue;
+    const d = Math.abs(dayNo(x.date) - dayNo(r.date));
+    if (d <= 3 && d < bestD) { best = x; bestD = d; }
+  }
+  return best;
 }
 
 /** True when this installment of this purchase is already on file (not just planned). */
@@ -54,16 +74,23 @@ export function isInstallmentDuplicate(r: ImportRow, cardId: string | null, exis
 export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx): Txn[] {
   const out: Txn[] = [];
   const has = (key: string, n: number) =>
-    out.find((x) => x.plan_key === key && x.inst_no === n) || existing.find((x) => x.plan_key === key && x.inst_no === n);
+    out.find((x) => x.plan_key === key && x.inst_no === n) || existing.find((x) => x.plan_key === key && x.inst_no === n && !ctx.removed?.includes(x.id));
   for (const r of rows) {
     const inst = r.kind === 'expense' ? parseInst(r.installment) : null;
     const note = r.description + (r.installment ? ` (${r.installment})` : '');
     const base: Txn = {
       id: ctx.uid(), kind: r.kind, amount: r.amount, date: r.date, category_id: r.category,
-      person_id: ctx.personId, card_id: ctx.cardId, note, source: 'import', import_id: ctx.importId,
-      created_at: ctx.now, pay_month: ctx.payMonth, plan_key: null, inst_no: null, projected: false,
+      person_id: ctx.personId, card_id: ctx.cardId, note, source: ctx.source || 'import', import_id: ctx.importId,
+      created_at: ctx.now, pay_month: ctx.payMonthOf ? ctx.payMonthOf(r.date) : ctx.payMonth, plan_key: null, inst_no: null, projected: false,
     };
+    // the statement replaces what a screenshot added earlier in the month (same id, nothing doubles)
+    const prov = ctx.source === 'screenshot' ? undefined : findProvisional(existing, new Set(out.map((x) => x.id)), ctx.cardId, r);
+    if (prov) {
+      Object.assign(base, { id: prov.id, ...keepPlan(r, prov) });
+      if (prov.plan_key) for (const x of existing) if (x.plan_key === prov.plan_key && x.projected) ctx.removed?.push(x.id);
+    }
     if (!inst) {
+      if (prov) { out.push(base); continue; }
       // A monthly payment planned by hand (loan, rent): the real statement row replaces this month's plan.
       const rec = r.kind === 'expense' ? findRecurring(existing, out, ctx, r) : undefined;
       out.push(rec ? { ...base, id: rec.id, plan_key: rec.plan_key, inst_no: rec.inst_no, ...keepPlan(r, rec) } : base);
@@ -78,10 +105,11 @@ export function buildImport(rows: ImportRow[], existing: Txn[], ctx: ImportCtx):
     // reuse the planned row's id so it is overwritten, not duplicated
     // keep the category / Ev flag the user gave this purchase in an earlier month
     const prior = planned ?? existing.find((x) => x.plan_key === key && !x.projected);
-    const kept = keepPlan(r, prior);
+    const kept = prior ? keepPlan(r, prior) : {};
+    if (planned && prov) ctx.removed?.push(prov.id); // keep the plan's row, drop the screenshot copy
     const row: Txn = { ...base, ...kept, id: planned ? planned.id : base.id, plan_key: key, inst_no: inst.n };
     out.push(row);
-    const startMonth = ctx.payMonth || r.date.slice(0, 7);
+    const startMonth = base.pay_month || r.date.slice(0, 7);
     for (let k = inst.n + 1; k <= inst.of; k++) {
       if (has(key, k)) continue;
       out.push({

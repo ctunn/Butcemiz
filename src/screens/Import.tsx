@@ -3,7 +3,9 @@ import { store, useStore } from '../store/store';
 import { useT } from '../i18n';
 import { useHelpers } from '../hooks';
 import { toast, Empty, askConfirm } from '../components/ui';
-import { parseStatementFile } from '../import/importFile';
+import { isImage, parseScreenshots, parseStatementFile } from '../import/importFile';
+import { payMonthFor } from '../lib/paymonth';
+import { todayISO } from '../lib/dates';
 import { PdfPasswordError } from '../import/errors';
 import { suggestCategory } from '../lib/categorize';
 import { merchantKey } from '../lib/text';
@@ -11,10 +13,10 @@ import { uid } from '../lib/id';
 import type { BankId, Kind, Txn } from '../types';
 import type { RowFlag } from '../import/parse';
 import { BANK_NAMES } from '../lib/banks';
-import { buildImport, isInstallmentDuplicate, isRecurringKey, parseInst, planUndo, syncPlan } from '../lib/installments';
+import { buildImport, findProvisional, isInstallmentDuplicate, isRecurringKey, parseInst, planUndo, syncPlan } from '../lib/installments';
 import { HOME_CATS } from '../lib/defaults';
 
-interface Row { key: string; date: string; description: string; amount: number; kind: Kind; category: string; include: boolean; flag: RowFlag; dup: boolean; installment?: string | null; suggested: string }
+interface Row { key: string; date: string; description: string; amount: number; kind: Kind; category: string; include: boolean; flag: RowFlag; dup: boolean; installment?: string | null; suggested: string; prov?: boolean }
 
 export function Import() {
   const { data } = useStore();
@@ -22,6 +24,7 @@ export function Import() {
   const h = useHelpers();
   const [cardId, setCardId] = useState<string>(data.cards[0]?.id || '');
   const [file, setFile] = useState<File | null>(null);
+  const [shots, setShots] = useState<File[] | null>(null); // bank-app screenshots (provisional rows)
   const [needPw, setNeedPw] = useState<'' | 'need' | 'wrong'>('');
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
@@ -34,10 +37,10 @@ export function Import() {
   const fileRef = useRef<HTMLInputElement>(null);
   const catsFor = (k: Kind) => data.categories.filter((c) => c.kind === k && !c.archived);
 
-  const run = async (f: File, password?: string) => {
+  const run = async (f: File, password?: string, images?: File[] | null) => {
     setBusy(true); setFailed(false); setRows(null);
     try {
-      const res = await parseStatementFile(f, password);
+      const res = images ? await parseScreenshots(images, todayISO()) : await parseStatementFile(f, password);
       setNeedPw(''); setBank(res.bank); setMode(res.mode); setSkipped(res.skipped); setStmtDates({ cut: res.cutDate ?? null, due: res.dueDate ?? null });
       // pick a card/account of the detected bank and statement type if the selected one doesn't match
       const sel = data.cards.find((c) => c.id === cardId);
@@ -47,7 +50,15 @@ export function Import() {
         const match = data.cards.find((c) => c.bank === res.bank && (c.kind || 'card') === wantKind) || data.cards.find((c) => c.bank === res.bank);
         if (match) { useCard = match.id; setCardId(match.id); }
       }
-      const cardTxns = data.txns.filter((x) => x.card_id === useCard);
+      // a statement replaces screenshot rows instead of calling them duplicates
+      const cardTxns = data.txns.filter((x) => x.card_id === useCard && (images || x.source !== 'screenshot'));
+      const provTaken = new Set<string>();
+      const provOf = (r: { date: string; amount: number; kind: Kind }) => {
+        if (images) return false;
+        const p = findProvisional(data.txns, provTaken, useCard || null, r);
+        if (p) provTaken.add(p.id);
+        return !!p;
+      };
       // planned installments are not real yet, so they never count as "already imported"
       const existing = new Set(cardTxns.filter((x) => !x.projected && (!x.plan_key || isRecurringKey(x.plan_key))).map((x) => `${x.date}|${x.amount}|${x.kind}`));
       const catIds = new Set(data.categories.map((c) => c.id));
@@ -64,7 +75,7 @@ export function Import() {
         // transfers that clearly pay for something (e.g. "AİDAT") are kept
         const keepTransfer = r.flag === 'transfer' && r.kind === 'expense' && !!suggestCategory(r.description, data.rules);
         const include = !dup && (!r.flag || keepTransfer);
-        return { key: String(i), date: r.date, description: r.description, amount: r.amount, kind: r.kind, category: sug, suggested: sug, include, flag: keepTransfer ? null : r.flag, dup, installment: r.installment };
+        return { key: String(i), date: r.date, description: r.description, amount: r.amount, kind: r.kind, category: sug, suggested: sug, include, flag: keepTransfer ? null : r.flag, dup, installment: r.installment, prov: !dup && provOf(r) };
       });
       setRows(out);
       if (!out.length) setFailed(true);
@@ -74,10 +85,14 @@ export function Import() {
     } finally { setBusy(false); }
   };
 
-  const onPick = (f: File | undefined | null) => {
-    if (!f) return;
+  const onPick = (list: FileList | null | undefined) => {
+    const files = list ? [...list] : [];
+    if (!files.length) return;
+    const images = files.filter(isImage);
+    const f = files[0];
     setFile(f); setPw(''); setNeedPw('');
-    run(f);
+    setShots(images.length ? images : null);
+    run(f, undefined, images.length ? images : null);
   };
 
   const selected = rows?.filter((r) => r.include) || [];
@@ -93,8 +108,10 @@ export function Import() {
     const payMonth = isCard && mode === 'card' && stmtDates.due ? stmtDates.due.slice(0, 7) : null;
     // cash/bank plans (loan) can be paid from an account statement, so they are candidates too
     const pool = data.txns.filter((x) => x.card_id === (cardId || null) || (!x.card_id && isRecurringKey(x.plan_key)));
+    const removed: string[] = [];
     const txns: Txn[] = buildImport(selected, pool, {
       cardId: cardId || null, personId: card?.person_id ?? null, payMonth: isCard ? payMonth : null, importId, now, uid,
+      source: shots ? 'screenshot' : 'import', payMonthOf: shots ? (d) => payMonthFor(d, card) : undefined, removed,
     }).map((x) => {
       // home categories start as Ev expenses, unless this purchase already has a choice from an earlier month
       const known = x.plan_key && data.txns.some((y) => y.plan_key === x.plan_key);
@@ -106,6 +123,20 @@ export function Import() {
     setBusy(true);
     try {
       await store.upsert('txns', [...txns, ...syncPlan(txns.filter((x) => !x.projected), data.txns)]);
+      if (removed.length) await store.remove('txns', removed);
+      const replaced = txns.filter((x) => data.txns.some((y) => y.id === x.id && y.source === 'screenshot')).length;
+      // screenshot rows from this statement's period that the statement does not have (cancelled, refunded…)
+      if (!shots && isCard && stmtDates.cut) {
+        const got = new Set([...txns.map((x) => x.id), ...removed]);
+        const left = data.txns.filter((x) => x.source === 'screenshot' && x.card_id === (cardId || null) && !x.projected && x.date <= stmtDates.cut! && !got.has(x.id));
+        if (left.length) {
+          const list = left.slice(0, 8).map((x) => `• ${x.date.slice(8, 10)}.${x.date.slice(5, 7)} ${(x.note || '').slice(0, 26)} ${h.money(x.amount)}`).join('\n');
+          if (await askConfirm(t('provLeft', { n: left.length }) + '\n\n' + list)) {
+            const plans = new Set(left.map((x) => x.plan_key).filter(Boolean));
+            await store.remove('txns', [...left.map((x) => x.id), ...data.txns.filter((x) => x.projected && plans.has(x.plan_key)).map((x) => x.id)]);
+          }
+        }
+      }
       // Remember the card's cut-off and due days so manual card entries land in the right month.
       if (card && isCard && stmtDates.cut && stmtDates.due) {
         const cut_day = Number(stmtDates.cut.slice(8, 10)), due_day = Number(stmtDates.due.slice(8, 10));
@@ -115,8 +146,9 @@ export function Import() {
         await store.upsert('rules', [...learned].map(([key, category_id]) => ({ id: data.rules.find((x) => x.key === key)?.id || uid(), key, category_id })));
       }
       const planned = txns.filter((x) => x.projected).length;
-      toast(t('imported', { n: txns.length - planned }) + (planned ? ' · ' + t('plannedAdded', { n: planned }) : ''));
-      setRows(null); setFile(null); if (fileRef.current) fileRef.current.value = '';
+      toast(t('imported', { n: txns.length - planned }) + (planned ? ' · ' + t('plannedAdded', { n: planned }) : '') + (replaced ? ' · ' + t('provReplaced', { n: replaced }) : '')
+        + (shots && isCard && card && (!card.cut_day || !card.due_day) ? ' · ' + t('noCardDays') : ''));
+      setRows(null); setFile(null); setShots(null); if (fileRef.current) fileRef.current.value = '';
     } catch (e: any) { toast(t('error') + ': ' + (e?.message || e), 'err'); }
     finally { setBusy(false); }
   };
@@ -153,7 +185,7 @@ export function Import() {
             {data.cards.map((c) => <option key={c.id} value={c.id}>{c.name}{h.person(c.person_id) ? ` · ${h.person(c.person_id)!.name}` : ''}</option>)}
           </select>
         </label>
-        <input ref={fileRef} type="file" accept=".pdf,.csv,.txt,application/pdf,text/csv" className="sr" id="stmt-file" onChange={(e) => onPick(e.target.files?.[0])} data-testid="file-input" />
+        <input ref={fileRef} type="file" multiple accept=".pdf,.csv,.txt,application/pdf,text/csv,image/*" className="sr" id="stmt-file" onChange={(e) => onPick(e.target.files)} data-testid="file-input" />
         <label htmlFor="stmt-file" className="btn primary block">{busy ? t('reading') : '📄 ' + t('chooseFile')}</label>
         {file && <p className="muted small center">{file.name}</p>}
 
@@ -189,7 +221,7 @@ export function Import() {
                 <div className="pv-main">
                   <div className="pv-top"><span className="pv-desc">{r.description}</span><span className={'pv-amt' + (r.kind === 'income' ? ' pos' : '')}>{r.kind === 'income' ? '+' : '−'}{h.money(r.amount)}</span></div>
                   <div className="pv-bottom">
-                    <span className="pv-date">{r.date.split('-').reverse().join('.')}{r.installment ? ` · ${t('installment')} ${r.installment}` : ''}{r.flag ? ` · ${t(('flag_' + r.flag) as any)}` : ''}{r.dup ? ` · ${t('duplicate')}` : ''}</span>
+                    <span className="pv-date">{r.date.split('-').reverse().join('.')}{r.installment ? ` · ${t('installment')} ${r.installment}` : ''}{r.flag ? ` · ${t(('flag_' + r.flag) as any)}` : ''}{r.dup ? ` · ${t('duplicate')}` : ''}{r.prov ? ` · ${t('provMatch')}` : ''}</span>
                     <select value={r.category} onChange={(e) => update(r.key, { category: e.target.value, include: true })} aria-label={t('category')}>
                       {catsFor(r.kind).map((c) => <option key={c.id} value={c.id}>{c.icon} {h.catName(c)}</option>)}
                     </select>
