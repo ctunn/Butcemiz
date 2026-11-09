@@ -258,3 +258,5 @@ details[open] { display: flex; flex-direction: column; gap: 10px; }
 .screen > .seg + .shop-add, .screen > .segmented + .shop-add { margin-top: 12px; }
 .import-entry { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
 .badge-prov { background: color-mix(in srgb, #F28E2B 18%, transparent); color: #B8641B; }
+.ocr-raw { margin-top: 8px; font-size: 13px; }
+.ocr-raw pre { white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; background: var(--surface-2); padding: 8px; border-radius: 8px; }

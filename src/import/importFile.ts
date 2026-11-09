@@ -11,8 +11,13 @@ export function isImage(file: File): boolean {
 export async function parseScreenshots(files: File[], today: string): Promise<ParseResult> {
   const { imageToLines } = await import('./ocr');
   const results: ParseResult[] = [];
-  for (const f of files) results.push(parseScreenshotLines(await imageToLines(f), today));
-  return mergeScreenshots(results);
+  const raw: string[] = [];
+  for (const f of files) {
+    const lines = await imageToLines(f);
+    raw.push(lines.map((l) => l.text).join('\n'));
+    results.push(parseScreenshotLines(lines, today));
+  }
+  return { ...mergeScreenshots(results), raw: raw.join('\n\n') };
 }
 
 export async function parseStatementFile(file: File, password?: string, bankHint?: BankId): Promise<ParseResult> {

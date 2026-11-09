@@ -23,6 +23,7 @@ export interface ParseResult {
   skipped: number;
   cutDate?: string | null; // statement cut-off date (card statements)
   dueDate?: string | null; // payment due date (card statements)
+  raw?: string; // text read from screenshots, shown when nothing could be recognised
 }
 
 export interface Line { text: string; y?: number; page?: number }

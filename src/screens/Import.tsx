@@ -34,11 +34,12 @@ export function Import() {
   const [stmtDates, setStmtDates] = useState<{ cut: string | null; due: string | null }>({ cut: null, due: null });
   const [rows, setRows] = useState<Row[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [raw, setRaw] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const catsFor = (k: Kind) => data.categories.filter((c) => c.kind === k && !c.archived);
 
   const run = async (f: File, password?: string, images?: File[] | null) => {
-    setBusy(true); setFailed(false); setRows(null);
+    setBusy(true); setFailed(false); setRows(null); setRaw('');
     try {
       const res = images ? await parseScreenshots(images, todayISO()) : await parseStatementFile(f, password);
       setNeedPw(''); setBank(res.bank); setMode(res.mode); setSkipped(res.skipped); setStmtDates({ cut: res.cutDate ?? null, due: res.dueDate ?? null });
@@ -78,7 +79,7 @@ export function Import() {
         return { key: String(i), date: r.date, description: r.description, amount: r.amount, kind: r.kind, category: sug, suggested: sug, include, flag: keepTransfer ? null : r.flag, dup, installment: r.installment, prov: !dup && provOf(r) };
       });
       setRows(out);
-      if (!out.length) setFailed(true);
+      if (!out.length) { setFailed(true); setRaw(res.raw ?? ''); }
     } catch (e) {
       if (e instanceof PdfPasswordError) { setNeedPw(e.wrong ? 'wrong' : 'need'); }
       else { console.error(e); setFailed(true); toast(t('error') + ': ' + ((e as any)?.message || e), 'err'); }
@@ -198,7 +199,13 @@ export function Import() {
             </div>
           </form>
         )}
-        {failed && <p className="field-err">{t('noRows')}</p>}
+        {failed && <p className="field-err">{shots ? t('noRowsShot') : t('noRows')}</p>}
+        {failed && shots && (
+          <details className="ocr-raw">
+            <summary>{t('ocrText')}</summary>
+            <pre>{raw || '—'}</pre>
+          </details>
+        )}
       </section>
 
       {rows && rows.length > 0 && (
