@@ -21,3 +21,13 @@ describe('screenshots and installment plans', () => {
     expect(findProvisional([shot], new Set(), 'g', { date: '2026-10-05', amount: 300, kind: 'expense' })).toBeUndefined();
   });
 });
+
+import { repairPlans } from '../../src/lib/installments';
+describe('screenshot rows saved without plan columns', () => {
+  it('repair rebuilds the plan from the note', () => {
+    const shot = tx({ source: 'screenshot', amount: 300, date: '2026-10-28', note: 'ORNEK (1/3)', pay_month: '2026-12', plan_key: null, inst_no: null });
+    const { upsert } = repairPlans([shot]);
+    const proj = upsert.filter((x) => x.projected).map((x) => [x.inst_no, x.pay_month]);
+    expect(proj).toEqual([[2, '2027-01'], [3, '2027-02']]);
+  });
+});

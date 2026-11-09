@@ -42,6 +42,8 @@ export async function myHousehold(): Promise<{ id: string; name: string; invite_
   return (data as any)?.households ?? null;
 }
 
+const NOT_NULL_FALSE = new Set(['shared', 'projected', 'done']);
+
 export class CloudBackend implements Backend {
   kind = 'cloud' as const;
   private missing = new Set<TableName>();
@@ -70,7 +72,16 @@ export class CloudBackend implements Backend {
       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('budget-schema-old'));
       throw new Error('schemaOld');
     }
-    const payload = (rows as any[]).map((r) => ({ ...r, household_id: this.householdId }));
+    // Rows in one batch must carry the same columns: a key missing on some rows is sent as NULL,
+    // which breaks NOT NULL columns (shared, projected). Fill the gaps with real values.
+    const keys = new Set<string>();
+    for (const r of rows as any[]) for (const k of Object.keys(r)) keys.add(k);
+    const payload = (rows as any[]).map((r) => {
+      const o: any = { household_id: this.householdId };
+      for (const k of keys) o[k] = r[k] !== undefined ? r[k] : (NOT_NULL_FALSE.has(k) ? false : null);
+      if (table === 'txns') { o.shared = !!r.shared; o.projected = !!r.projected; }
+      return o;
+    });
     let { error } = await this.s.from(table).upsert(payload, { onConflict: 'household_id,id' });
     // shopping list columns added later: saving without them would put items on the wrong list
     if (error && table === 'shopping' && /\b(list|price)\b/.test(error.message || '')) {
@@ -78,7 +89,7 @@ export class CloudBackend implements Backend {
       throw new Error('schemaOld');
     }
     // Database not yet updated with the v1.1 columns: save without them rather than failing.
-    if (error && /pay_month|cut_day|due_day|plan_key|inst_no|projected|shared/.test(error.message || '')) {
+    if (error && /pay_month|cut_day|due_day|plan_key|inst_no|projected|shared/.test(error.message || '') && /does not exist|could not find|schema cache/i.test(error.message || '')) {
       // planned installments can't be told apart without the new columns, so they are skipped
       const stripped = payload.filter((r) => !r.projected).map(({ pay_month, cut_day, due_day, plan_key, inst_no, projected, shared, ...rest }) => rest);
       ({ error } = await this.s.from(table).upsert(stripped, { onConflict: 'household_id,id' }));

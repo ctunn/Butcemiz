@@ -4,6 +4,7 @@ import type { Backend } from './backend';
 import { LocalBackend, readLocal } from './local';
 import { missingDefaultCats } from '../lib/defaults';
 import { repairPlans } from '../lib/installments';
+import { payMonthFor } from '../lib/paymonth';
 
 export interface Prefs { lang: Lang; currency: string; defaultPersonId: string | null; monthBasis: 'pay' | 'purchase' }
 const PREFS_KEY = 'budget-prefs';
@@ -93,10 +94,15 @@ export const store = {
 
   /** Bring installment plans and monthly series back in order (missing months, wrong month, stale copies). */
   async repairPlans(): Promise<number> {
+    // screenshot rows once saved without their payment month (cloud fallback): put them back in the month they are paid
+    const cards = new Map(state.data.cards.map((c) => [c.id, c]));
+    const months = state.data.txns.filter((x) => x.source === 'screenshot' && !x.pay_month && x.card_id)
+      .map((x) => ({ ...x, pay_month: payMonthFor(x.date, cards.get(x.card_id!)) })).filter((x) => x.pay_month);
+    if (months.length) await store.upsert('txns', months);
     const { upsert, remove } = repairPlans(state.data.txns);
     if (upsert.length) await store.upsert('txns', upsert);
     if (remove.length) await store.remove('txns', remove);
-    return upsert.length + remove.length;
+    return months.length + upsert.length + remove.length;
   },
 };
 
