@@ -70,3 +70,10 @@ describe('Garanti app layout (day / month / year+merchant stacked)', () => {
     expect(r.rows[3].description).not.toMatch(/4\/6/);
   });
 });
+
+describe('bank of a Garanti app screenshot', () => {
+  it('is found from the card name and Bonus lines', async () => {
+    const { detectBank } = await import('../../src/import/parse');
+    expect(detectBank('BONUS PLATINUM TRINK\n0,09 Bonus')).toBe('garanti');
+  });
+});

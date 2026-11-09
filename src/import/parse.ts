@@ -39,6 +39,8 @@ const BANK_SIGNS: [BankId, RegExp][] = [
 export function detectBank(text: string): BankId {
   const f = fold(text.slice(0, 20000));
   for (const [id, re] of BANK_SIGNS) if (re.test(f)) return id;
+  // Garanti's app shows the card name ("BONUS PLATINUM") and Bonus points on every row
+  if (/\bbonus\b/.test(f)) return 'garanti';
   return 'other';
 }
 

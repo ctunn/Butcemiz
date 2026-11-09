@@ -5,7 +5,7 @@ import { useHelpers } from '../hooks';
 import { toast, Empty, askConfirm } from '../components/ui';
 import { isImage, parseScreenshots, parseStatementFile } from '../import/importFile';
 import { payMonthFor } from '../lib/paymonth';
-import { todayISO } from '../lib/dates';
+import { todayISO, shiftMonth, monthLabel } from '../lib/dates';
 import { PdfPasswordError } from '../import/errors';
 import { suggestCategory } from '../lib/categorize';
 import { merchantKey } from '../lib/text';
@@ -19,7 +19,7 @@ import { HOME_CATS } from '../lib/defaults';
 interface Row { key: string; date: string; description: string; amount: number; kind: Kind; category: string; include: boolean; flag: RowFlag; dup: boolean; installment?: string | null; suggested: string; prov?: boolean }
 
 export function Import() {
-  const { data } = useStore();
+  const { data, prefs } = useStore();
   const t = useT();
   const h = useHelpers();
   const [cardId, setCardId] = useState<string>(data.cards[0]?.id || '');
@@ -31,6 +31,7 @@ export function Import() {
   const [bank, setBank] = useState<BankId | null>(null);
   const [mode, setMode] = useState<'card' | 'account'>('card');
   const [skipped, setSkipped] = useState(0);
+  const [shotMonth, setShotMonth] = useState(''); // payment month for a batch of screenshots
   const [stmtDates, setStmtDates] = useState<{ cut: string | null; due: string | null }>({ cut: null, due: null });
   const [rows, setRows] = useState<Row[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -79,6 +80,11 @@ export function Import() {
         const include = !dup && (!r.flag || keepTransfer);
         return { key: String(i), date: r.date, description: r.description, amount: r.amount, kind: r.kind, category: sug, suggested: sug, include, flag: keepTransfer ? null : r.flag, dup, installment: r.installment, prov: !dup && provOf(r) };
       });
+      if (images && out.length) {
+        // one screenshot batch = one statement period: default to the month the latest row is paid in
+        const last = out.reduce((a, r) => (r.date > a ? r.date : a), out[0].date);
+        setShotMonth(payMonthFor(last, data.cards.find((c) => c.id === useCard)) || shiftMonth(last.slice(0, 7), 1));
+      }
       setRows(out);
       if (!out.length) { setFailed(true); setRaw(res.raw ?? ''); }
     } catch (e) {
@@ -113,7 +119,7 @@ export function Import() {
     const removed: string[] = [];
     const txns: Txn[] = buildImport(selected, pool, {
       cardId: cardId || null, personId: card?.person_id ?? null, payMonth: isCard ? payMonth : null, importId, now, uid,
-      source: shots ? 'screenshot' : 'import', payMonthOf: shots ? (d) => payMonthFor(d, card) : undefined, removed,
+      source: shots ? 'screenshot' : 'import', payMonthOf: shots ? (d) => shotMonth || payMonthFor(d, card) : undefined, removed,
     }).map((x) => {
       // home categories start as Ev expenses, unless this purchase already has a choice from an earlier month
       const known = x.plan_key && data.txns.some((y) => y.plan_key === x.plan_key);
@@ -218,6 +224,15 @@ export function Import() {
           {skipped > 0 && <p className="muted small">{t('skippedRows', { n: skipped })}</p>}
           {rows.some((r) => r.flag) && <p className="muted small">{t('unticked', { n: rows.filter((r) => r.flag).length })}</p>}
           {rows.some((r) => r.dup) && <p className="muted small">{t('duplicates', { n: rows.filter((r) => r.dup).length })}</p>}
+          {shots && shotMonth && (
+            <label className="field"><span>{t('payMonth')}</span>
+              <select value={shotMonth} onChange={(e) => setShotMonth(e.target.value)} data-testid="shot-month">
+                {[-1, 0, 1, 2].map((k) => shiftMonth(todayISO().slice(0, 7), k)).concat(shotMonth).filter((m, i, a) => a.indexOf(m) === i).sort().map((m) => (
+                  <option key={m} value={m}>{monthLabel(m, prefs.lang)}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="row-actions">
             <button className="link" onClick={() => setRows(rows.map((r) => ({ ...r, include: true })))}>{t('selectAll')}</button>
             <button className="link" onClick={() => setRows(rows.map((r) => ({ ...r, include: false })))}>{t('selectNone')}</button>
